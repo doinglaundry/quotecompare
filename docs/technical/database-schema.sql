@@ -18,7 +18,13 @@ CREATE TABLE projects (
     name TEXT NOT NULL CHECK (length(trim(name)) BETWEEN 1 AND 120),
     -- 房产名称或地址，例如：房产 A / 12 King Street；可不填，保存为文字。
     property TEXT CHECK (property IS NULL OR length(property) <= 200),
-    -- 本次施工需求，例如：更换橱柜、保留地板；空字符串表示尚未填写。
+    -- 本次施工需求：要做哪些工作、保留哪些内容、报价需包含哪些费用。
+    -- 空字符串表示尚未填写；以下为填写示例，实际需求由用户确认。
+    -- 厨房翻新：更换橱柜和台面，保留地板，包含垃圾清运。
+    -- 卫生间设备更换：更换马桶和洗手台，保留现有瓷砖。
+    -- 外墙粉刷：外墙重新粉刷两遍，包含脚手架，不含窗框粉刷。
+    -- 电路改造：更换配电箱和老化电线，包含验收和合规证明。
+    -- 屋顶维修：更换破损屋顶瓦片，修复漏水处，清理排水沟。
     scope TEXT NOT NULL DEFAULT '' CHECK (length(scope) <= 4000),
     -- 项目比较币种，例如 GBP、CNY；不自动换算不同币种报价。
     currency TEXT NOT NULL CHECK (
