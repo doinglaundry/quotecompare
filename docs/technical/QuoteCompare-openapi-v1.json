@@ -5693,7 +5693,7 @@
             "type": "string",
             "description": "名称"
           },
-          "property_label": {
+          "property": {
             "anyOf": [
               {
                 "type": "string",
@@ -5760,7 +5760,7 @@
         "required": [
           "id",
           "name",
-          "property_label",
+          "property",
           "scope",
           "currency",
           "status",
@@ -5782,7 +5782,7 @@
             "minLength": 1,
             "maxLength": 120
           },
-          "property_label": {
+          "property": {
             "anyOf": [
               {
                 "type": "string",
@@ -5828,7 +5828,7 @@
             "minLength": 1,
             "maxLength": 120
           },
-          "property_label": {
+          "property": {
             "anyOf": [
               {
                 "type": "string",
@@ -7897,7 +7897,7 @@
             "type": "string",
             "description": "报告项目标题"
           },
-          "property_label": {
+          "property": {
             "anyOf": [
               {
                 "type": "string",
@@ -7936,7 +7936,7 @@
         "required": [
           "report_id",
           "project_title",
-          "property_label",
+          "property",
           "created_at",
           "comparison",
           "flags",

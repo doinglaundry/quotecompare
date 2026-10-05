@@ -12,18 +12,27 @@ BEGIN;
 
 -- 01. projects：项目与当前业务版本。
 CREATE TABLE projects (
+    -- 项目唯一编号；同一项目下的报价通过 project_id 关联。
     id TEXT NOT NULL PRIMARY KEY CHECK (length(id) BETWEEN 1 AND 80),
+    -- 项目名称，例如：厨房维修。
     name TEXT NOT NULL CHECK (length(trim(name)) BETWEEN 1 AND 120),
-    property_label TEXT CHECK (property_label IS NULL OR length(property_label) <= 200),
+    -- 房产名称或地址，例如：房产 A / 12 King Street；可不填，保存为文字。
+    property TEXT CHECK (property IS NULL OR length(property) <= 200),
+    -- 本次施工需求，例如：更换橱柜、保留地板；空字符串表示尚未填写。
     scope TEXT NOT NULL DEFAULT '' CHECK (length(scope) <= 4000),
+    -- 项目比较币种，例如 GBP、CNY；不自动换算不同币种报价。
     currency TEXT NOT NULL CHECK (
         length(currency) = 3 AND currency NOT GLOB '*[^A-Z]*'
     ),
+    -- 项目状态：active 进行中、completed 已完成、archived 已归档。
     status TEXT NOT NULL DEFAULT 'active'
         CHECK (status IN ('active', 'completed', 'archived')),
+    -- 内部数据版本号：业务数据变化时递增；检测过期修改和 AI 结果，界面无需展示。
     revision INTEGER NOT NULL DEFAULT 1
         CHECK (typeof(revision) = 'integer' AND revision >= 1),
+    -- 创建时间，使用 UTC 保存。
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    -- 最近修改时间，使用 UTC 保存；由应用在更新时维护。
     updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 
