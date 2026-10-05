@@ -40,13 +40,464 @@
   app/storage/               # ORM、事务、本地文件、钥匙串
   app/schemas/               # Pydantic 输入 / 输出类型
   migrations/                # Alembic 迁移
-  tests/                     # 语义对齐、金额、任务、接口契约</code></pre><h3>2.2 数据库与文件存储</h3><p>SQLite + SQLAlchemy，开启 WAL 和 foreign_keys；Alembic 管理迁移。单用户、每项目最多五份报价，版本快照保存 JSON，适合本机部署。写事务短且串行；OCR、模型请求和报告渲染在事务外执行。金额、单价用十进制字符串，Python Decimal 计算。</p><table><thead><tr><th>表（共 14 张）</th><th>主要字段</th><th>用途</th></tr></thead><tbody><tr><td>projects</td><td>id, name, scope, currency, status, revision</td><td>项目与乐观锁</td></tr><tr><td>quotes</td><td>id, project_id, content_hash, source_type, status, review_version</td><td>报价身份；内容去重</td></tr><tr><td>source_blocks</td><td>id, quote_id, page, text, bbox_json, confidence</td><td>原文定位；bbox 为左上角归一化坐标</td></tr><tr><td>extractions</td><td>id, quote_id, source_hash, raw_json, model_id, prompt_version</td><td>不可变的 AI 原始提取结果</td></tr><tr><td>reviews</td><td>quote_id, version, editable_facts_json, saved_at</td><td>核对版本；复合主键 quote_id + version</td></tr><tr><td>field_mappings</td><td>project_id, version, groups_json, source_revision</td><td>字段全集分组；复合主键 project_id + version</td></tr><tr><td>confirmations</td><td>id, project_id, source_revision, quote_versions_json, mapping_version</td><td>核对确认记录</td></tr><tr><td>comparisons</td><td>id, project_id, source_revision, snapshot_json, created_at</td><td>不可变对比与原文副本；预览图复制到快照文件夹</td></tr><tr><td>drafts</td><td>id, comparison_id, quote_id, revision, subject, body</td><td>独立草稿；重新生成不覆盖改稿</td></tr><tr><td>reports</td><td>id, comparison_id, job_id, options_json, file_ref, status</td><td>冻结预览数据及生成文件</td></tr><tr><td>jobs</td><td>id, kind, state, input_json, result_json, source_revision</td><td>持久化任务；input_json 不含密钥</td></tr><tr><td>usage_calls</td><td>id, job_id, provider, model_id, generation, usage_json, cost_json</td><td>每次实际模型请求一行；重试也计一行</td></tr><tr><td>app_settings</td><td>singleton_id=1, provider, revision, keychain_ref</td><td>仅当前连接；不存原始 API Key</td></tr><tr><td>idempotency_keys</td><td>key, operation, request_hash, response_ref, expires_at</td><td>POST 去重；至少保留 24 小时</td></tr></tbody></table><pre><code>~/Library/Application Support/&lt;AppName&gt;/
+  tests/                     # 语义对齐、金额、任务、接口契约</code></pre><h3>2.2 数据库与文件存储</h3><p>SQLite + SQLAlchemy，开启 WAL 与 foreign_keys；Alembic 管理后续迁移。下面逐表给出完整 CREATE TABLE 与索引 SQL，另提供可执行的 <a href="database-schema.sql">完整建库文件</a>。共十四张业务表。</p><p>在空数据库执行完整 SQL 文件；首次建表放在一个事务中。每个新连接重新开启 foreign_keys 与 busy_timeout。ID 由应用生成；created_at 默认 UTC，updated_at 与 revision 在保存事务中显式更新。事实中的金额及预计费用以十进制字符串保存，用 Python Decimal 校验和计算。</p><h4>连接设置与建库事务</h4><pre><code class="language-sql">-- QuoteCompare / SQLite：十四张业务表的首次建库 SQL。
+-- 在空数据库执行；后续结构变更由 Alembic 迁移，不重复执行本文件。
+-- 每次数据库连接都要开启 foreign_keys；WAL 只适用于磁盘数据库。
+-- ID 由应用生成；时间统一为 UTC；金额由 Python Decimal 校验与计算。
+-- JSON 列的内部字段按 OpenAPI DTO 校验；这里校验 JSON 外层类型。
+
+PRAGMA foreign_keys = ON;
+PRAGMA journal_mode = WAL;
+PRAGMA busy_timeout = 5000;
+
+BEGIN;</code></pre><h4 id="table-projects">1. projects — 项目与当前业务版本。</h4><pre><code class="language-sql">-- 01. projects：项目与当前业务版本。
+CREATE TABLE projects (
+    id TEXT NOT NULL PRIMARY KEY CHECK (length(id) BETWEEN 1 AND 80),
+    name TEXT NOT NULL CHECK (length(trim(name)) BETWEEN 1 AND 120),
+    property_label TEXT CHECK (property_label IS NULL OR length(property_label) &lt;= 200),
+    scope TEXT NOT NULL DEFAULT &#x27;&#x27; CHECK (length(scope) &lt;= 4000),
+    currency TEXT NOT NULL CHECK (
+        length(currency) = 3 AND currency NOT GLOB &#x27;*[^A-Z]*&#x27;
+    ),
+    status TEXT NOT NULL DEFAULT &#x27;active&#x27;
+        CHECK (status IN (&#x27;active&#x27;, &#x27;completed&#x27;, &#x27;archived&#x27;)),
+    revision INTEGER NOT NULL DEFAULT 1
+        CHECK (typeof(revision) = &#x27;integer&#x27; AND revision &gt;= 1),
+    created_at TEXT NOT NULL DEFAULT (strftime(&#x27;%Y-%m-%dT%H:%M:%fZ&#x27;, &#x27;now&#x27;)),
+    updated_at TEXT NOT NULL DEFAULT (strftime(&#x27;%Y-%m-%dT%H:%M:%fZ&#x27;, &#x27;now&#x27;))
+);
+
+CREATE INDEX idx_projects_status_updated
+    ON projects (status, updated_at DESC, id);</code></pre><h4 id="table-quotes">2. quotes — 报价身份、原文件位置及核对版本。</h4><pre><code class="language-sql">-- 02. quotes：报价身份、原文件位置及核对版本。
+CREATE TABLE quotes (
+    id TEXT NOT NULL PRIMARY KEY CHECK (length(id) BETWEEN 1 AND 80),
+    project_id TEXT NOT NULL,
+    contractor_name TEXT CHECK (contractor_name IS NULL OR length(contractor_name) &lt;= 200),
+    filename TEXT,
+    source_type TEXT NOT NULL CHECK (source_type IN (&#x27;pdf&#x27;, &#x27;image&#x27;, &#x27;text&#x27;)),
+    content_sha256 TEXT NOT NULL CHECK (
+        length(content_sha256) = 64 AND content_sha256 NOT GLOB &#x27;*[^0-9a-f]*&#x27;
+    ),
+    file_ref TEXT NOT NULL CHECK (length(file_ref) &gt; 0),
+    page_count INTEGER NOT NULL DEFAULT 0
+        CHECK (typeof(page_count) = &#x27;integer&#x27; AND page_count BETWEEN 0 AND 30),
+    source_method TEXT CHECK (
+        source_method IS NULL OR source_method IN (&#x27;pdf_text&#x27;, &#x27;vision_ocr&#x27;, &#x27;mixed&#x27;, &#x27;paste&#x27;)
+    ),
+    status TEXT NOT NULL DEFAULT &#x27;imported&#x27; CHECK (
+        status IN (&#x27;imported&#x27;, &#x27;extracting&#x27;, &#x27;review_required&#x27;, &#x27;reviewed&#x27;, &#x27;failed&#x27;)
+    ),
+    review_version INTEGER NOT NULL DEFAULT 1
+        CHECK (typeof(review_version) = &#x27;integer&#x27; AND review_version &gt;= 1),
+    created_at TEXT NOT NULL DEFAULT (strftime(&#x27;%Y-%m-%dT%H:%M:%fZ&#x27;, &#x27;now&#x27;)),
+    updated_at TEXT NOT NULL DEFAULT (strftime(&#x27;%Y-%m-%dT%H:%M:%fZ&#x27;, &#x27;now&#x27;)),
+    CONSTRAINT uq_quotes_project_hash UNIQUE (project_id, content_sha256),
+    FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_quotes_project_created ON quotes (project_id, created_at, id);</code></pre><h4 id="table-source_blocks">3. source_blocks — 原文块、页码和归一化定位坐标。</h4><pre><code class="language-sql">-- 03. source_blocks：原文块、页码和归一化定位坐标。
+CREATE TABLE source_blocks (
+    id TEXT NOT NULL PRIMARY KEY CHECK (length(id) BETWEEN 1 AND 80),
+    quote_id TEXT NOT NULL,
+    page INTEGER CHECK (page IS NULL OR (typeof(page) = &#x27;integer&#x27; AND page &gt;= 1)),
+    ordinal INTEGER NOT NULL CHECK (typeof(ordinal) = &#x27;integer&#x27; AND ordinal &gt;= 0),
+    text TEXT NOT NULL,
+    bbox_json TEXT CHECK (
+        bbox_json IS NULL OR CASE WHEN json_valid(bbox_json) THEN
+            json_type(bbox_json) = &#x27;array&#x27;
+            AND json_array_length(bbox_json) = 4
+            AND json_type(bbox_json, &#x27;$[0]&#x27;) IN (&#x27;integer&#x27;, &#x27;real&#x27;)
+            AND json_type(bbox_json, &#x27;$[1]&#x27;) IN (&#x27;integer&#x27;, &#x27;real&#x27;)
+            AND json_type(bbox_json, &#x27;$[2]&#x27;) IN (&#x27;integer&#x27;, &#x27;real&#x27;)
+            AND json_type(bbox_json, &#x27;$[3]&#x27;) IN (&#x27;integer&#x27;, &#x27;real&#x27;)
+            AND json_extract(bbox_json, &#x27;$[0]&#x27;) BETWEEN 0 AND 1
+            AND json_extract(bbox_json, &#x27;$[1]&#x27;) BETWEEN 0 AND 1
+            AND json_extract(bbox_json, &#x27;$[2]&#x27;) BETWEEN 0 AND 1
+            AND json_extract(bbox_json, &#x27;$[3]&#x27;) BETWEEN 0 AND 1
+            AND json_extract(bbox_json, &#x27;$[0]&#x27;) + json_extract(bbox_json, &#x27;$[2]&#x27;) &lt;= 1.000001
+            AND json_extract(bbox_json, &#x27;$[1]&#x27;) + json_extract(bbox_json, &#x27;$[3]&#x27;) &lt;= 1.000001
+        ELSE 0 END
+    ),
+    ocr_confidence REAL CHECK (
+        ocr_confidence IS NULL OR ocr_confidence BETWEEN 0 AND 1
+    ),
+    UNIQUE (quote_id, ordinal),
+    FOREIGN KEY (quote_id) REFERENCES quotes (id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_source_blocks_quote_page ON source_blocks (quote_id, page, ordinal);</code></pre><h4 id="table-extractions">4. extractions — 不可变的原始模型提取结果。</h4><pre><code class="language-sql">-- 04. extractions：不可变的原始模型提取结果。
+CREATE TABLE extractions (
+    id TEXT NOT NULL PRIMARY KEY CHECK (length(id) BETWEEN 1 AND 80),
+    quote_id TEXT NOT NULL,
+    source_hash TEXT NOT NULL CHECK (
+        length(source_hash) = 64 AND source_hash NOT GLOB &#x27;*[^0-9a-f]*&#x27;
+    ),
+    raw_json TEXT NOT NULL CHECK (
+        CASE WHEN json_valid(raw_json) THEN json_type(raw_json) = &#x27;object&#x27; ELSE 0 END
+    ),
+    provider TEXT NOT NULL CHECK (provider IN (&#x27;openai&#x27;, &#x27;claude&#x27;, &#x27;deepseek&#x27;)),
+    model_id TEXT NOT NULL CHECK (length(model_id) &gt; 0),
+    prompt_version TEXT NOT NULL CHECK (length(prompt_version) &gt; 0),
+    created_at TEXT NOT NULL DEFAULT (strftime(&#x27;%Y-%m-%dT%H:%M:%fZ&#x27;, &#x27;now&#x27;)),
+    UNIQUE (quote_id, id),
+    FOREIGN KEY (quote_id) REFERENCES quotes (id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_extractions_quote_created ON extractions (quote_id, created_at DESC);</code></pre><h4 id="table-reviews">5. reviews — 核对事实按版本追加；导入时建立 version=1 的空核对记录。</h4><pre><code class="language-sql">-- 05. reviews：核对事实按版本追加；导入时建立 version=1 的空核对记录。
+CREATE TABLE reviews (
+    quote_id TEXT NOT NULL,
+    version INTEGER NOT NULL CHECK (typeof(version) = &#x27;integer&#x27; AND version &gt;= 1),
+    extraction_id TEXT,
+    contractor_name TEXT,
+    editable_facts_json TEXT NOT NULL DEFAULT &#x27;[]&#x27; CHECK (
+        CASE WHEN json_valid(editable_facts_json)
+            THEN json_type(editable_facts_json) = &#x27;array&#x27; ELSE 0 END
+    ),
+    warnings_json TEXT NOT NULL DEFAULT &#x27;[]&#x27; CHECK (
+        CASE WHEN json_valid(warnings_json) THEN json_type(warnings_json) = &#x27;array&#x27; ELSE 0 END
+    ),
+    saved_at TEXT NOT NULL DEFAULT (strftime(&#x27;%Y-%m-%dT%H:%M:%fZ&#x27;, &#x27;now&#x27;)),
+    PRIMARY KEY (quote_id, version),
+    FOREIGN KEY (quote_id) REFERENCES quotes (id) ON DELETE CASCADE,
+    FOREIGN KEY (quote_id, extraction_id) REFERENCES extractions (quote_id, id)
+        DEFERRABLE INITIALLY DEFERRED
+);
+
+CREATE INDEX idx_reviews_extraction ON reviews (quote_id, extraction_id);</code></pre><h4 id="table-field_mappings">6. field_mappings — 整个项目的字段全集映射，每次保存追加一个版本。</h4><pre><code class="language-sql">-- 06. field_mappings：整个项目的字段全集映射，每次保存追加一个版本。
+CREATE TABLE field_mappings (
+    project_id TEXT NOT NULL,
+    version INTEGER NOT NULL CHECK (typeof(version) = &#x27;integer&#x27; AND version &gt;= 1),
+    source_revision INTEGER NOT NULL CHECK (
+        typeof(source_revision) = &#x27;integer&#x27; AND source_revision &gt;= 1
+    ),
+    groups_json TEXT NOT NULL CHECK (
+        CASE WHEN json_valid(groups_json) THEN json_type(groups_json) = &#x27;array&#x27; ELSE 0 END
+    ),
+    created_at TEXT NOT NULL DEFAULT (strftime(&#x27;%Y-%m-%dT%H:%M:%fZ&#x27;, &#x27;now&#x27;)),
+    PRIMARY KEY (project_id, version),
+    FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_field_mappings_source ON field_mappings (project_id, source_revision);</code></pre><h4 id="table-confirmations">7. confirmations — 固定项目版本、全部报价版本及字段映射版本。</h4><pre><code class="language-sql">-- 07. confirmations：固定项目版本、全部报价版本及字段映射版本。
+CREATE TABLE confirmations (
+    id TEXT NOT NULL PRIMARY KEY CHECK (length(id) BETWEEN 1 AND 80),
+    project_id TEXT NOT NULL,
+    source_revision INTEGER NOT NULL CHECK (
+        typeof(source_revision) = &#x27;integer&#x27; AND source_revision &gt;= 1
+    ),
+    mapping_version INTEGER NOT NULL CHECK (
+        typeof(mapping_version) = &#x27;integer&#x27; AND mapping_version &gt;= 1
+    ),
+    quote_versions_json TEXT NOT NULL CHECK (
+        CASE WHEN json_valid(quote_versions_json) THEN
+            json_type(quote_versions_json) = &#x27;array&#x27;
+            AND json_array_length(quote_versions_json) BETWEEN 1 AND 5
+        ELSE 0 END
+    ),
+    allow_pending INTEGER NOT NULL DEFAULT 0 CHECK (allow_pending IN (0, 1)),
+    pending_count INTEGER NOT NULL DEFAULT 0 CHECK (
+        typeof(pending_count) = &#x27;integer&#x27; AND pending_count &gt;= 0
+    ),
+    confirmed_at TEXT NOT NULL DEFAULT (strftime(&#x27;%Y-%m-%dT%H:%M:%fZ&#x27;, &#x27;now&#x27;)),
+    UNIQUE (project_id, id),
+    FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+    FOREIGN KEY (project_id, mapping_version) REFERENCES field_mappings (project_id, version)
+        ON DELETE CASCADE
+);
+
+CREATE INDEX idx_confirmations_mapping ON confirmations (project_id, mapping_version);
+CREATE INDEX idx_confirmations_source ON confirmations (project_id, source_revision);</code></pre><h4 id="table-comparisons">8. comparisons — 不可变对比快照，包含原文与原页图副本位置。</h4><pre><code class="language-sql">-- 08. comparisons：不可变对比快照，包含原文与原页图副本位置。
+-- 不关联当前 quotes：删除报价后，历史快照仍保留报价 ID 与依据。
+CREATE TABLE comparisons (
+    id TEXT NOT NULL PRIMARY KEY CHECK (length(id) BETWEEN 1 AND 80),
+    project_id TEXT NOT NULL,
+    confirmation_id TEXT NOT NULL,
+    source_revision INTEGER NOT NULL CHECK (
+        typeof(source_revision) = &#x27;integer&#x27; AND source_revision &gt;= 1
+    ),
+    snapshot_json TEXT NOT NULL CHECK (
+        CASE WHEN json_valid(snapshot_json) THEN json_type(snapshot_json) = &#x27;object&#x27; ELSE 0 END
+    ),
+    created_at TEXT NOT NULL DEFAULT (strftime(&#x27;%Y-%m-%dT%H:%M:%fZ&#x27;, &#x27;now&#x27;)),
+    UNIQUE (project_id, id),
+    FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+    FOREIGN KEY (project_id, confirmation_id) REFERENCES confirmations (project_id, id)
+        ON DELETE CASCADE
+);
+
+CREATE INDEX idx_comparisons_project_created
+    ON comparisons (project_id, created_at DESC, id);
+CREATE INDEX idx_comparisons_confirmation ON comparisons (project_id, confirmation_id);</code></pre><h4 id="table-drafts">9. drafts — 可编辑草稿。quote_id 指快照中的承包商，不 FK 到当前 quotes。</h4><pre><code class="language-sql">-- 09. drafts：可编辑草稿。quote_id 指快照中的承包商，不 FK 到当前 quotes。
+CREATE TABLE drafts (
+    id TEXT NOT NULL PRIMARY KEY CHECK (length(id) BETWEEN 1 AND 80),
+    project_id TEXT NOT NULL,
+    comparison_id TEXT NOT NULL,
+    quote_id TEXT NOT NULL CHECK (length(quote_id) BETWEEN 1 AND 80),
+    revision INTEGER NOT NULL DEFAULT 1
+        CHECK (typeof(revision) = &#x27;integer&#x27; AND revision &gt;= 1),
+    language TEXT NOT NULL CHECK (language IN (&#x27;zh-CN&#x27;, &#x27;en&#x27;)),
+    question_ids_json TEXT NOT NULL CHECK (
+        CASE WHEN json_valid(question_ids_json) THEN json_type(question_ids_json) = &#x27;array&#x27; ELSE 0 END
+    ),
+    subject TEXT NOT NULL CHECK (length(subject) &lt;= 500),
+    body TEXT NOT NULL CHECK (length(body) &lt;= 20000),
+    created_at TEXT NOT NULL DEFAULT (strftime(&#x27;%Y-%m-%dT%H:%M:%fZ&#x27;, &#x27;now&#x27;)),
+    updated_at TEXT NOT NULL DEFAULT (strftime(&#x27;%Y-%m-%dT%H:%M:%fZ&#x27;, &#x27;now&#x27;)),
+    FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+    FOREIGN KEY (project_id, comparison_id) REFERENCES comparisons (project_id, id)
+        ON DELETE CASCADE
+);
+
+CREATE INDEX idx_drafts_comparison_quote
+    ON drafts (comparison_id, quote_id, updated_at DESC);
+CREATE INDEX idx_drafts_project ON drafts (project_id);</code></pre><h4 id="table-jobs">10. jobs — 持久化任务队列。input/result/error JSON 不含 API Key。</h4><pre><code class="language-sql">-- 10. jobs：持久化任务队列。input/result/error JSON 不含 API Key。
+CREATE TABLE jobs (
+    id TEXT NOT NULL PRIMARY KEY CHECK (length(id) BETWEEN 1 AND 80),
+    project_id TEXT,
+    kind TEXT NOT NULL CHECK (
+        kind IN (&#x27;extraction&#x27;, &#x27;alignment&#x27;, &#x27;draft&#x27;, &#x27;report&#x27;, &#x27;connection_test&#x27;)
+    ),
+    state TEXT NOT NULL DEFAULT &#x27;queued&#x27; CHECK (
+        state IN (&#x27;queued&#x27;, &#x27;running&#x27;, &#x27;succeeded&#x27;, &#x27;partial_failed&#x27;, &#x27;failed&#x27;,
+                  &#x27;cancel_requested&#x27;, &#x27;cancelled&#x27;, &#x27;interrupted&#x27;)
+    ),
+    stage TEXT NOT NULL DEFAULT &#x27;&#x27;,
+    input_json TEXT NOT NULL CHECK (
+        CASE WHEN json_valid(input_json) THEN json_type(input_json) = &#x27;object&#x27; ELSE 0 END
+    ),
+    result_json TEXT CHECK (
+        result_json IS NULL OR CASE WHEN json_valid(result_json)
+            THEN json_type(result_json) = &#x27;object&#x27; ELSE 0 END
+    ),
+    error_json TEXT CHECK (
+        error_json IS NULL OR CASE WHEN json_valid(error_json)
+            THEN json_type(error_json) = &#x27;object&#x27; ELSE 0 END
+    ),
+    completed_units INTEGER NOT NULL DEFAULT 0 CHECK (
+        typeof(completed_units) = &#x27;integer&#x27; AND completed_units &gt;= 0
+    ),
+    total_units INTEGER NOT NULL DEFAULT 0 CHECK (
+        typeof(total_units) = &#x27;integer&#x27; AND total_units &gt;= 0
+    ),
+    provider TEXT CHECK (provider IS NULL OR provider IN (&#x27;openai&#x27;, &#x27;claude&#x27;, &#x27;deepseek&#x27;)),
+    model_id TEXT,
+    connection_generation INTEGER CHECK (
+        connection_generation IS NULL OR
+        (typeof(connection_generation) = &#x27;integer&#x27; AND connection_generation &gt;= 1)
+    ),
+    resource_id TEXT,
+    created_at TEXT NOT NULL DEFAULT (strftime(&#x27;%Y-%m-%dT%H:%M:%fZ&#x27;, &#x27;now&#x27;)),
+    updated_at TEXT NOT NULL DEFAULT (strftime(&#x27;%Y-%m-%dT%H:%M:%fZ&#x27;, &#x27;now&#x27;)),
+    CHECK (total_units = 0 OR completed_units &lt;= total_units),
+    CHECK ((kind = &#x27;connection_test&#x27; AND project_id IS NULL)
+        OR (kind &lt;&gt; &#x27;connection_test&#x27; AND project_id IS NOT NULL)),
+    CHECK ((provider IS NULL AND model_id IS NULL AND connection_generation IS NULL)
+        OR (provider IS NOT NULL AND model_id IS NOT NULL)),
+    UNIQUE (project_id, id),
+    FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_jobs_queue ON jobs (state, created_at, id);
+CREATE INDEX idx_jobs_project ON jobs (project_id, created_at DESC);
+CREATE UNIQUE INDEX uq_jobs_project_writer
+    ON jobs (project_id)
+    WHERE kind IN (&#x27;extraction&#x27;, &#x27;alignment&#x27;)
+      AND state IN (&#x27;queued&#x27;, &#x27;running&#x27;, &#x27;cancel_requested&#x27;);</code></pre><h4 id="table-reports">11. reports — 冻结的预览与报告文件，关联同一项目中的对比快照。</h4><pre><code class="language-sql">-- 11. reports：冻结的预览与报告文件，关联同一项目中的对比快照。
+CREATE TABLE reports (
+    id TEXT NOT NULL PRIMARY KEY CHECK (length(id) BETWEEN 1 AND 80),
+    project_id TEXT NOT NULL,
+    comparison_id TEXT NOT NULL,
+    job_id TEXT NOT NULL UNIQUE,
+    format TEXT NOT NULL CHECK (format IN (&#x27;pdf&#x27;, &#x27;csv&#x27;)),
+    options_json TEXT NOT NULL CHECK (
+        CASE WHEN json_valid(options_json) THEN json_type(options_json) = &#x27;object&#x27; ELSE 0 END
+    ),
+    preview_ref TEXT,
+    file_ref TEXT,
+    filename TEXT NOT NULL CHECK (length(filename) &gt; 0),
+    status TEXT NOT NULL DEFAULT &#x27;generating&#x27;
+        CHECK (status IN (&#x27;generating&#x27;, &#x27;ready&#x27;, &#x27;failed&#x27;)),
+    failure_code TEXT,
+    source_revision INTEGER NOT NULL CHECK (
+        typeof(source_revision) = &#x27;integer&#x27; AND source_revision &gt;= 1
+    ),
+    created_at TEXT NOT NULL DEFAULT (strftime(&#x27;%Y-%m-%dT%H:%M:%fZ&#x27;, &#x27;now&#x27;)),
+    completed_at TEXT,
+    CHECK (status &lt;&gt; &#x27;ready&#x27; OR
+        (file_ref IS NOT NULL AND preview_ref IS NOT NULL AND completed_at IS NOT NULL)),
+    FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+    FOREIGN KEY (project_id, comparison_id) REFERENCES comparisons (project_id, id)
+        ON DELETE CASCADE,
+    FOREIGN KEY (project_id, job_id) REFERENCES jobs (project_id, id)
+        DEFERRABLE INITIALLY DEFERRED
+);
+
+CREATE INDEX idx_reports_comparison ON reports (comparison_id, created_at DESC);
+CREATE INDEX idx_reports_project ON reports (project_id, created_at DESC);</code></pre><h4 id="table-usage_calls">12. usage_calls — 每次实际模型请求一条；删除业务项目后保留使用台账。</h4><pre><code class="language-sql">-- 12. usage_calls：每次实际模型请求一条；删除业务项目后保留使用台账。
+-- generation 是历史配置代际，不 FK 到只保留当前配置的 app_settings。
+CREATE TABLE usage_calls (
+    id TEXT NOT NULL PRIMARY KEY CHECK (length(id) BETWEEN 1 AND 80),
+    job_id TEXT,
+    project_id TEXT,
+    provider TEXT NOT NULL CHECK (provider IN (&#x27;openai&#x27;, &#x27;claude&#x27;, &#x27;deepseek&#x27;)),
+    model_id TEXT NOT NULL CHECK (length(model_id) &gt; 0),
+    connection_generation INTEGER CHECK (
+        connection_generation IS NULL OR
+        (typeof(connection_generation) = &#x27;integer&#x27; AND connection_generation &gt;= 1)
+    ),
+    credential_scope TEXT NOT NULL CHECK (credential_scope IN (&#x27;saved&#x27;, &#x27;ephemeral&#x27;)),
+    purpose TEXT NOT NULL CHECK (purpose IN (&#x27;extraction&#x27;, &#x27;alignment&#x27;, &#x27;draft&#x27;, &#x27;connection_test&#x27;)),
+    outcome TEXT NOT NULL DEFAULT &#x27;unknown&#x27;
+        CHECK (outcome IN (&#x27;succeeded&#x27;, &#x27;failed&#x27;, &#x27;cancelled&#x27;, &#x27;unknown&#x27;)),
+    input_tokens INTEGER CHECK (
+        input_tokens IS NULL OR (typeof(input_tokens) = &#x27;integer&#x27; AND input_tokens &gt;= 0)
+    ),
+    output_tokens INTEGER CHECK (
+        output_tokens IS NULL OR (typeof(output_tokens) = &#x27;integer&#x27; AND output_tokens &gt;= 0)
+    ),
+    cached_input_tokens INTEGER CHECK (
+        cached_input_tokens IS NULL OR
+        (typeof(cached_input_tokens) = &#x27;integer&#x27; AND cached_input_tokens &gt;= 0)
+    ),
+    usage_known INTEGER NOT NULL DEFAULT 0 CHECK (usage_known IN (0, 1)),
+    estimated_cost_amount TEXT CHECK (
+        estimated_cost_amount IS NULL OR (
+            length(estimated_cost_amount) &gt; 0
+            AND estimated_cost_amount NOT GLOB &#x27;*[^0-9.]*&#x27;
+            AND substr(estimated_cost_amount, 1, 1) BETWEEN &#x27;0&#x27; AND &#x27;9&#x27;
+            AND substr(estimated_cost_amount, -1, 1) BETWEEN &#x27;0&#x27; AND &#x27;9&#x27;
+            AND length(estimated_cost_amount) - length(replace(estimated_cost_amount, &#x27;.&#x27;, &#x27;&#x27;)) &lt;= 1
+        )
+    ),
+    estimated_cost_currency TEXT CHECK (
+        estimated_cost_currency IS NULL OR
+        (length(estimated_cost_currency) = 3 AND estimated_cost_currency NOT GLOB &#x27;*[^A-Z]*&#x27;)
+    ),
+    pricing_version TEXT,
+    raw_usage_json TEXT CHECK (
+        raw_usage_json IS NULL OR CASE WHEN json_valid(raw_usage_json)
+            THEN json_type(raw_usage_json) = &#x27;object&#x27; ELSE 0 END
+    ),
+    created_at TEXT NOT NULL DEFAULT (strftime(&#x27;%Y-%m-%dT%H:%M:%fZ&#x27;, &#x27;now&#x27;)),
+    CHECK ((credential_scope = &#x27;saved&#x27; AND connection_generation IS NOT NULL)
+        OR (credential_scope = &#x27;ephemeral&#x27; AND connection_generation IS NULL
+            AND purpose = &#x27;connection_test&#x27;)),
+    CHECK (usage_known = 0 OR (input_tokens IS NOT NULL AND output_tokens IS NOT NULL)),
+    CHECK (cached_input_tokens IS NULL OR input_tokens IS NULL OR cached_input_tokens &lt;= input_tokens),
+    CHECK ((estimated_cost_amount IS NULL AND estimated_cost_currency IS NULL)
+        OR (estimated_cost_amount IS NOT NULL AND estimated_cost_currency IS NOT NULL
+            AND pricing_version IS NOT NULL AND usage_known = 1)),
+    FOREIGN KEY (job_id) REFERENCES jobs (id) ON DELETE SET NULL,
+    FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE SET NULL
+);
+
+CREATE INDEX idx_usage_calls_provider_generation_created
+    ON usage_calls (provider, connection_generation, created_at, id);
+CREATE INDEX idx_usage_calls_job ON usage_calls (job_id);
+CREATE INDEX idx_usage_calls_project ON usage_calls (project_id);</code></pre><h4 id="table-app_settings">13. app_settings — 固定 singleton_id=1；只存当前连接的钥匙串引用。</h4><pre><code class="language-sql">-- 13. app_settings：固定 singleton_id=1；只存当前连接的钥匙串引用。
+CREATE TABLE app_settings (
+    singleton_id INTEGER NOT NULL PRIMARY KEY CHECK (singleton_id = 1),
+    provider TEXT NOT NULL DEFAULT &#x27;openai&#x27; CHECK (provider IN (&#x27;openai&#x27;, &#x27;claude&#x27;, &#x27;deepseek&#x27;)),
+    revision INTEGER NOT NULL DEFAULT 1 CHECK (typeof(revision) = &#x27;integer&#x27; AND revision &gt;= 1),
+    keychain_ref TEXT,
+    key_hint TEXT CHECK (key_hint IS NULL OR length(key_hint) = 4),
+    balance_cache_json TEXT CHECK (
+        balance_cache_json IS NULL OR CASE WHEN json_valid(balance_cache_json)
+            THEN json_type(balance_cache_json) = &#x27;object&#x27; ELSE 0 END
+    ),
+    balance_checked_at TEXT,
+    updated_at TEXT NOT NULL DEFAULT (strftime(&#x27;%Y-%m-%dT%H:%M:%fZ&#x27;, &#x27;now&#x27;)),
+    CHECK ((keychain_ref IS NULL AND key_hint IS NULL)
+        OR (keychain_ref IS NOT NULL AND key_hint IS NOT NULL)),
+    CHECK ((balance_cache_json IS NULL AND balance_checked_at IS NULL)
+        OR (balance_cache_json IS NOT NULL AND balance_checked_at IS NOT NULL))
+);</code></pre><h4 id="table-idempotency_keys">14. idempotency_keys — 同一操作 + 同一幂等键复用响应，不重复启动任务。</h4><pre><code class="language-sql">-- 14. idempotency_keys：同一操作 + 同一幂等键复用响应，不重复启动任务。
+CREATE TABLE idempotency_keys (
+    operation TEXT NOT NULL CHECK (length(operation) &gt; 0),
+    key TEXT NOT NULL CHECK (length(key) BETWEEN 1 AND 100),
+    project_id TEXT,
+    request_hash TEXT NOT NULL CHECK (
+        length(request_hash) = 64 AND request_hash NOT GLOB &#x27;*[^0-9a-f]*&#x27;
+    ),
+    state TEXT NOT NULL DEFAULT &#x27;in_progress&#x27;
+        CHECK (state IN (&#x27;in_progress&#x27;, &#x27;completed&#x27;)),
+    response_status INTEGER CHECK (response_status IS NULL OR response_status BETWEEN 200 AND 599),
+    response_ref TEXT,
+    response_json TEXT CHECK (
+        response_json IS NULL OR CASE WHEN json_valid(response_json)
+            THEN json_type(response_json) = &#x27;object&#x27; ELSE 0 END
+    ),
+    created_at TEXT NOT NULL DEFAULT (strftime(&#x27;%Y-%m-%dT%H:%M:%fZ&#x27;, &#x27;now&#x27;)),
+    expires_at TEXT NOT NULL,
+    PRIMARY KEY (operation, key),
+    CHECK (expires_at &gt; created_at),
+    CHECK (state &lt;&gt; &#x27;completed&#x27; OR (response_status IS NOT NULL AND response_json IS NOT NULL)),
+    FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_idempotency_keys_expiry ON idempotency_keys (expires_at);
+CREATE INDEX idx_idempotency_keys_project ON idempotency_keys (project_id);</code></pre><h4>业务约束触发器</h4><pre><code class="language-sql">-- 业务约束触发器：导入数量上限、身份固定、历史版本禁止原地改写。
+CREATE TRIGGER trg_quotes_limit
+BEFORE INSERT ON quotes
+WHEN (SELECT count(*) FROM quotes WHERE project_id = NEW.project_id) &gt;= 5
+BEGIN
+    SELECT RAISE(ABORT, &#x27;QUOTE_LIMIT&#x27;);
+END;
+
+CREATE TRIGGER trg_quotes_project_immutable
+BEFORE UPDATE OF project_id ON quotes
+WHEN NEW.project_id &lt;&gt; OLD.project_id
+BEGIN
+    SELECT RAISE(ABORT, &#x27;QUOTE_PROJECT_IMMUTABLE&#x27;);
+END;
+
+CREATE TRIGGER trg_extractions_immutable
+BEFORE UPDATE ON extractions
+BEGIN
+    SELECT RAISE(ABORT, &#x27;EXTRACTION_IMMUTABLE&#x27;);
+END;
+
+CREATE TRIGGER trg_reviews_immutable
+BEFORE UPDATE ON reviews
+BEGIN
+    SELECT RAISE(ABORT, &#x27;REVIEW_VERSION_IMMUTABLE&#x27;);
+END;
+
+CREATE TRIGGER trg_field_mappings_immutable
+BEFORE UPDATE ON field_mappings
+BEGIN
+    SELECT RAISE(ABORT, &#x27;MAPPING_VERSION_IMMUTABLE&#x27;);
+END;
+
+CREATE TRIGGER trg_confirmations_immutable
+BEFORE UPDATE ON confirmations
+BEGIN
+    SELECT RAISE(ABORT, &#x27;CONFIRMATION_IMMUTABLE&#x27;);
+END;
+
+CREATE TRIGGER trg_comparisons_immutable
+BEFORE UPDATE ON comparisons
+BEGIN
+    SELECT RAISE(ABORT, &#x27;COMPARISON_IMMUTABLE&#x27;);
+END;
+
+CREATE TRIGGER trg_provider_switch_clear_key
+BEFORE UPDATE OF provider ON app_settings
+WHEN NEW.provider &lt;&gt; OLD.provider AND
+    (NEW.keychain_ref IS NOT NULL OR NEW.key_hint IS NOT NULL
+     OR NEW.balance_cache_json IS NOT NULL OR NEW.balance_checked_at IS NOT NULL)
+BEGIN
+    SELECT RAISE(ABORT, &#x27;PROVIDER_SWITCH_MUST_CLEAR_KEY&#x27;);
+END;</code></pre><h4>默认配置与事务提交</h4><pre><code class="language-sql">-- 首次启动配置；不创建或保存任何 API Key。
+INSERT INTO app_settings (singleton_id, provider, revision) VALUES (1, &#x27;openai&#x27;, 1);
+
+COMMIT;</code></pre><h4>API 字段与存储的对应关系</h4><ul><li>Project.quote_count 由 quotes 计数，latest_comparison_id 从 comparisons 读取，不重复存储；project_revision 来自 projects.revision。</li><li>报价导入时，在同一事务创建 quotes 与 reviews(version=1)；保存核对时追加 reviews，更新 quotes.review_version 并递增项目 revision。字段归并保存同样追加新版本。</li><li>Comparison.is_stale 通过 source_revision 与项目当前 revision 比较，不修改快照。快照复制全部依据，drafts.quote_id 指向快照内承包商，不外键关联可能已删除的当前报价。</li><li>估算费用的字符串金额、币种与 pricing_version 必须一起保存；未知 Token 和费用使用 NULL。连接代际是历史值，不外键关联仅有当前版本的 app_settings。</li><li>API Key 只在 macOS 钥匙串中；app_settings 只保存引用和末四位提示。切换服务商时，应用先处理钥匙串与活动任务，再在配置事务清空引用、提示和余额缓存。</li><li>SQL 验证 JSON 外层类型；Fact、FieldGroup、快照与报告选项的内部字段，以及同义字段覆盖完整性，由 Pydantic 与业务校验负责。项目与文件引用的权限、相对路径也由本地服务验证。</li></ul><h4>文件目录与删除流程</h4><pre><code>~/Library/Application Support/QuoteCompare/
   app.sqlite
   quotes/&lt;quote_id&gt;/original + pages/
   snapshots/&lt;comparison_id&gt;/pages/
   reports/&lt;report_id&gt;/preview.json + report.pdf 或 report.csv
   cache/
-  logs/  # 不含密钥、完整报价或模型请求正文</code></pre><p>文件先写临时目录，校验后原子重命名；数据库成功提交后再删除旧文件。启动清理未被引用的临时文件。删除报价保留快照副本；删除项目会清除关联快照、草稿、报告和文件。历史 usage 保留去标识化统计，project_id 置 null。</p><h3>2.3 字段提取、归并和对比</h3><ol><li>本地读取：PDF 用 pypdf 提取文本；无可靠文本的页面用 pypdfium2 渲染，并通过 macOS Vision / PyObjC OCR。图片走同一 OCR 管线。每个文本块拥有稳定 block_id、页码与坐标。OCR 低置信内容进入核对提示。</li><li>模型抽取：发送带 block_id 的必要文本；三家模型统一输出 Fact。JSON 必须通过 Pydantic 校验，引用必须存在；模型不能自由生成页面坐标或自动执行报价中的文字指令。无依据内容标待确认。</li><li>构建全集：收集所有报价的全部事实。按工程工项、语义、价格层级、单位、币种和税费口径生成建议；名称“价格”与“金额”只在实际含义一致时对齐。</li><li>确认映射：每个 fact_id 必须且只能出现在一个组；不同工项、单价与合计不合并。同一家多个值保留为多值待确认；无法归并的字段独立保留。原始名称和依据不被覆盖。</li><li>生成对比：程序按字段组 × 全部报价产生矩阵。缺失输出 missing / “— 未提供”；bundled 保留打包价格；pending 和 not_comparable 明确展示。未知 VAT 不补齐；币种不同不自动换算；未说明的施工范围不能视为相同。</li><li>版本冻结：快照包含全部事实、分组、原文和页图副本。任何导入、核对或映射修改使旧确认失效，旧快照仍可读但标 is_stale。邮件与报告绑定 comparison_id。</li></ol><table><thead><tr><th>示例</th><th>处理</th></tr></thead><tbody><tr><td>报价一 A/B/C，报价二 D/E，报价三 F/G</td><td>不同含义全部保留为 A..G；对应报价缺失位置标未提供</td></tr><tr><td>价格=£1,200 合计；金额=£1,000 合计</td><td>先检查币种与税费口径；相同则进入同一个合计字段，否则分别保留并提示不可直接比较</td></tr><tr><td>价格=£20/m²；金额=£1,000</td><td>单价与合计分开；不能因为都是数字就合并</td></tr><tr><td>材料+人工打包；另一份分别报价</td><td>保留打包项和分项；不拆造数值，可展示总价差异并提示范围确认</td></tr></tbody></table><h3>2.4 任务、并发、失败恢复</h3><p>jobs 表 + 服务内 asyncio 调度，模型请求并发为 1；OCR / 文档渲染使用有界线程池。首版无需 Redis、Celery 或额外服务。每个项目的提取 / 映射任务持有业务锁，期间编辑该项目返回 PROJECT_BUSY；报告、草稿读取不可变快照，可与其他项目操作共存。</p><pre><code>queued → running → succeeded / partial_failed / failed
+  logs/  # 不含密钥、完整报价或模型请求正文</code></pre><p>文件先写临时目录，校验后原子重命名；数据库成功提交后再清理旧文件。外键级联只负责数据库行，不自动删除磁盘文件。删除报价保留快照副本；删除项目清除关联快照、草稿、报告和任务，usage_calls 的项目与任务引用设为 NULL，保留使用统计。删除项目须先检查活动任务，文件清理可在启动时继续完成。</p><p>同一项目最多一个活动提取或归并任务由部分唯一索引约束；应用仍需在编辑事务中检查活动任务，并将数据库错误映射到对应的 409 错误码。乐观锁使用 expected_revision，不能仅依赖普通 UPDATE。</p><h4>SQL 执行验证</h4><p>已在 SQLite 3.53.1 上执行：十四张表、二十二个索引、八个触发器；四十四项检查通过，包括外键、JSON、金额格式、报价上限、历史不可变、跨项目关联、级联删除与用量保留。foreign_key_check 为空，integrity_check 为 ok。此结果验证建库设计，不代表 App 已实现。</p><p>SQL 语法与行为依据：<a href="https://www.sqlite.org/lang_createtable.html">CREATE TABLE</a>、<a href="https://www.sqlite.org/foreignkeys.html">外键与级联</a>、<a href="https://www.sqlite.org/json1.html">JSON 函数</a>、<a href="https://www.sqlite.org/lang_createtrigger.html">触发器</a>。</p><h3>2.3 字段提取、归并和对比</h3><ol><li>本地读取：PDF 用 pypdf 提取文本；无可靠文本的页面用 pypdfium2 渲染，并通过 macOS Vision / PyObjC OCR。图片走同一 OCR 管线。每个文本块拥有稳定 block_id、页码与坐标。OCR 低置信内容进入核对提示。</li><li>模型抽取：发送带 block_id 的必要文本；三家模型统一输出 Fact。JSON 必须通过 Pydantic 校验，引用必须存在；模型不能自由生成页面坐标或自动执行报价中的文字指令。无依据内容标待确认。</li><li>构建全集：收集所有报价的全部事实。按工程工项、语义、价格层级、单位、币种和税费口径生成建议；名称“价格”与“金额”只在实际含义一致时对齐。</li><li>确认映射：每个 fact_id 必须且只能出现在一个组；不同工项、单价与合计不合并。同一家多个值保留为多值待确认；无法归并的字段独立保留。原始名称和依据不被覆盖。</li><li>生成对比：程序按字段组 × 全部报价产生矩阵。缺失输出 missing / “— 未提供”；bundled 保留打包价格；pending 和 not_comparable 明确展示。未知 VAT 不补齐；币种不同不自动换算；未说明的施工范围不能视为相同。</li><li>版本冻结：快照包含全部事实、分组、原文和页图副本。任何导入、核对或映射修改使旧确认失效，旧快照仍可读但标 is_stale。邮件与报告绑定 comparison_id。</li></ol><table><thead><tr><th>示例</th><th>处理</th></tr></thead><tbody><tr><td>报价一 A/B/C，报价二 D/E，报价三 F/G</td><td>不同含义全部保留为 A..G；对应报价缺失位置标未提供</td></tr><tr><td>价格=£1,200 合计；金额=£1,000 合计</td><td>先检查币种与税费口径；相同则进入同一个合计字段，否则分别保留并提示不可直接比较</td></tr><tr><td>价格=£20/m²；金额=£1,000</td><td>单价与合计分开；不能因为都是数字就合并</td></tr><tr><td>材料+人工打包；另一份分别报价</td><td>保留打包项和分项；不拆造数值，可展示总价差异并提示范围确认</td></tr></tbody></table><h3>2.4 任务、并发、失败恢复</h3><p>jobs 表 + 服务内 asyncio 调度，模型请求并发为 1；OCR / 文档渲染使用有界线程池。首版无需 Redis、Celery 或额外服务。每个项目的提取 / 映射任务持有业务锁，期间编辑该项目返回 PROJECT_BUSY；报告、草稿读取不可变快照，可与其他项目操作共存。</p><pre><code>queued → running → succeeded / partial_failed / failed
 queued / running → cancel_requested → cancelled
 App 意外关闭后：queued / running / cancel_requested → interrupted</code></pre><p>每份报价提取独立提交，部分失败保留成功结果；重试只选失败报价。进程重启后中断任务不自动重复云调用，用户可从已完成的本地解析阶段重试。上游超时且不确定是否已处理时标 unknown，不自动重发；确定的 429 按 Retry-After 最多重试一次，JSON 格式失败允许一次修复调用，两次都写用量台账。取消不能撤销已发生的服务商费用。</p><p>模型任务绑定当前连接代际；有活动模型任务时，切换、保存新密钥或清除密钥返回 CONNECTION_BUSY。密钥仅在调用期间读入内存，测试未保存密钥不落库。完成或取消后释放锁和内存。所有主机休眠、网络断开、Keychain 拒绝、JSON 不合法都转为明确错误状态。</p><h3>2.5 模型配置和费用</h3><table><thead><tr><th>服务商枚举</th><th>系统预设模型（候选基线）</th><th>适配方式</th><th>余额能力</th></tr></thead><tbody><tr><td>openai</td><td>gpt-6.1-sol</td><td>Responses API</td><td>首版不接管理权限接口；返回 unsupported</td></tr><tr><td>claude</td><td>claude-sonnet-5-5</td><td>Anthropic Messages API</td><td>首版不接管理权限接口；返回 unsupported</td></tr><tr><td>deepseek</td><td>deepseek-flash</td><td>DeepSeek OpenAI 格式接口</td><td>GET /user/balance，保留官方返回币种</td></tr></tbody></table><p>模型由随 App 发布的 presets.json 固定，界面只读；上线前用真实报价测试三家模型的可用性、JSON 稳定性和成本，再锁定发布版本。首版统一用本地文本/OCR输入，避免接口因 PDF 或图像能力而分叉。API Key 是各家 API 平台密钥。模型默认项不增加用户配置字段。</p><p>Keychain 使用 Python keyring 的 macOS 后端，只有一个当前条目；权限失败拒绝保存，不写入 SQLite 或日志。GET 配置不回传原密钥。价格清单记录模型、币种、缓存输入、输出、峰谷条件、来源与更新时间；超过 7 天标 stale，无法准确套用条件时 estimated_cost=null。每次调用记录供应商实际 usage，缺失就为 null；汇总按币种分组，不用零代替未知。余额缓存有效期 5 分钟，按连接代际隔离。</p><h3>2.6 Mac 打包与启动</h3><p>Electron 打包前端；PyInstaller onedir 打包 Python、OCR 桥接、PDF 和数据库依赖，作为 App Resources 中的后端程序。构建 arm64 与 x64 独立安装包，App 和嵌套可执行文件分别签名并完成公证。技术基线为 macOS 13+，不是兼容性实测结果；发布验证包含 Apple Silicon 和 Intel。</p><ol><li>Electron 单实例启动，生成随机本机会话 Token，经管道交给后端，不放命令行参数或日志。</li><li>后端先迁移数据库，绑定 127.0.0.1 动态端口，通过就绪消息回传端口；主进程随后检查 /health。</li><li>主进程验证所有 IPC 参数、资源 ID 和允许操作；本机 API 验证 Bearer 会话，拒绝网页 Origin 与非白名单 Host，不开启通配 CORS。</li><li>退出时取消任务、提交本地状态并关闭后端；崩溃重启一次，任务按 interrupted 恢复，不自动重新收费。</li></ol><p>上传校验实际 MIME、PDF 页数和字节上限；建议限制 50MB / 30 页，可由 /health 返回，需在实现时同步 PRD。不执行嵌入脚本，异常文件在本地失败。PDF 报告包含 Unicode 字体并按内容分页；CSV UTF-8，危险公式前缀转义。隐藏地址时不附原始报价文档或原始截图，原文摘录先进行地址移除，预览与文件一致。</p><section id="interfaces"><h3>2.7 全部对外接口：类型 / 功能 / 入参 / 出参</h3><p>下表“对外”指向桌面客户端开放的本机接口，统一前缀 <code>/api/v1</code>。业务成功响应直接返回 DTO；错误直接返回 Error。所有请求含本机会话 Bearer Token；全部 POST 带 Idempotency-Key。Money 是字符串金额加币种，时间为 UTC，null 表示未知。</p><table><thead><tr><th>HTTP 状态 / 错误码</th><th>含义</th><th>前端处理</th></tr></thead><tbody><tr><td>400 INVALID_REQUEST</td><td>非法参数组合</td><td>显示明确字段提示</td></tr><tr><td>401 SESSION_INVALID</td><td>本机会话无效</td><td>由主进程重新握手</td></tr><tr><td>404 NOT_FOUND</td><td>本地对象不存在</td><td>刷新列表</td></tr><tr><td>409 VERSION_CONFLICT / PROJECT_BUSY / CONNECTION_BUSY</td><td>版本或活动任务冲突</td><td>保留输入，重新读取或取消任务</td></tr><tr><td>409 QUOTE_LIMIT / DUPLICATE_QUOTE / REVIEW_NOT_CONFIRMED</td><td>报价数量、重复或核对前置条件失败</td><td>提示对应动作</td></tr><tr><td>413 FILE_TOO_LARGE / PAGE_LIMIT</td><td>文件超过技术限制</td><td>选择较小文件或拆分</td></tr><tr><td>422 VALIDATION_ERROR</td><td>字段内容错误</td><td>定位表单字段</td></tr><tr><td>503 DEPENDENCY_UNAVAILABLE / KEYCHAIN_UNAVAILABLE</td><td>本地依赖或权限不可用</td><td>修复本地依赖或权限；不回退为明文保存</td></tr><tr><td>Job.error: MODEL_AUTH / RATE_LIMIT / MODEL_TIMEOUT / MODEL_OUTPUT_INVALID</td><td>已受理任务的模型失败</td><td>任务失败展示，不混同 HTTP 请求失败</td></tr></tbody></table><h4>公共 · 3 项</h4><table><thead><tr><th>接口类型 / 路径</th><th>功能</th><th>入参</th><th>出参</th><th>行为与约束</th></tr></thead><tbody><tr><td><code>GET /health</code><br><small>getHealth</small></td><td>后端就绪与限制</td><td>无业务入参</td><td>200 · <a href="#schema-Health">Health</a></td><td>按统一接口约定执行。</td></tr><tr><td><code>GET /jobs/{job_id}</code><br><small>getJob</small></td><td>读取异步任务状态、进度和结果</td><td>path job_id：string，必填</td><td>200 · <a href="#schema-Job">Job</a></td><td>按统一接口约定执行。</td></tr><tr><td><code>POST /jobs/{job_id}/cancel</code><br><small>cancelJob</small></td><td>申请取消任务</td><td>path job_id：string，必填<br>header Idempotency-Key：string，必填</td><td>202 · <a href="#schema-Job">Job</a></td><td>取消为尽力而为；上游已处理的调用仍可能计费。重复取消幂等；结束任务保持原状态。</td></tr></tbody></table><h4>项目与报价 · 13 项</h4><table><thead><tr><th>接口类型 / 路径</th><th>功能</th><th>入参</th><th>出参</th><th>行为与约束</th></tr></thead><tbody><tr><td><code>GET /projects</code><br><small>listProjects</small></td><td>项目列表与历史</td><td>query cursor：string，可选<br>query limit：integer，可选<br>query status：string：active | completed | archived，可选<br>query search：string，可选</td><td>200 · <a href="#schema-ProjectPage">ProjectPage</a></td><td>按统一接口约定执行。</td></tr><tr><td><code>POST /projects</code><br><small>createProject</small></td><td>创建项目</td><td>header Idempotency-Key：string，必填<br>JSON：<a href="#schema-ProjectCreate">ProjectCreate</a></td><td>201 · <a href="#schema-Project">Project</a></td><td>按统一接口约定执行。</td></tr><tr><td><code>GET /projects/{project_id}</code><br><small>getProject</small></td><td>读取项目</td><td>path project_id：string，必填</td><td>200 · <a href="#schema-Project">Project</a></td><td>按统一接口约定执行。</td></tr><tr><td><code>PATCH /projects/{project_id}</code><br><small>updateProject</small></td><td>修改或归档项目</td><td>path project_id：string，必填<br>JSON：<a href="#schema-ProjectUpdate">ProjectUpdate</a></td><td>200 · <a href="#schema-Project">Project</a></td><td>按统一接口约定执行。</td></tr><tr><td><code>DELETE /projects/{project_id}</code><br><small>deleteProject</small></td><td>删除项目与关联本地文件</td><td>path project_id：string，必填<br>query expected_revision：integer，必填</td><td>204 · 无返回体</td><td>云任务或导出任务使用此项目时返回 PROJECT_BUSY；成功后旧报告对象失效。由前端明确确认删除。</td></tr><tr><td><code>GET /projects/{project_id}/quotes</code><br><small>listQuotes</small></td><td>读取项目所有报价</td><td>path project_id：string，必填</td><td>200 · <a href="#schema-QuoteList">QuoteList</a></td><td>按统一接口约定执行。</td></tr><tr><td><code>POST /projects/{project_id}/quotes</code><br><small>uploadQuote</small></td><td>导入一个报价文件</td><td>path project_id：string，必填<br>header Idempotency-Key：string，必填<br>multipart/form-data：<a href="#schema-QuoteUpload">QuoteUpload</a></td><td>201 · <a href="#schema-Quote">Quote</a></td><td>PDF / PNG / JPEG；每次一份，前端循环导入。建议技术上限：50MB、PDF 30 页；项目最多 5 份。事务检查数量与版本；同项目相同内容返回 DUPLICATE_QUOTE。</td></tr><tr><td><code>POST /projects/{project_id}/quotes/text</code><br><small>importQuoteText</small></td><td>导入粘贴报价文字</td><td>path project_id：string，必填<br>header Idempotency-Key：string，必填<br>JSON：<a href="#schema-QuoteTextImport">QuoteTextImport</a></td><td>201 · <a href="#schema-Quote">Quote</a></td><td>按统一接口约定执行。</td></tr><tr><td><code>GET /quotes/{quote_id}</code><br><small>getQuote</small></td><td>读取报价信息</td><td>path quote_id：string，必填</td><td>200 · <a href="#schema-Quote">Quote</a></td><td>按统一接口约定执行。</td></tr><tr><td><code>PATCH /quotes/{quote_id}</code><br><small>updateQuote</small></td><td>修改承包商名称</td><td>path quote_id：string，必填<br>JSON：<a href="#schema-QuoteUpdate">QuoteUpdate</a></td><td>200 · <a href="#schema-Quote">Quote</a></td><td>按统一接口约定执行。</td></tr><tr><td><code>DELETE /quotes/{quote_id}</code><br><small>deleteQuote</small></td><td>移除报价及原文件</td><td>path quote_id：string，必填<br>query expected_revision：integer，必填</td><td>204 · 无返回体</td><td>递增项目版本；现有对比快照保留，但显示过期。历史快照自带依据副本，不能依赖已删除报价。</td></tr><tr><td><code>GET /quotes/{quote_id}/source</code><br><small>getQuoteSource</small></td><td>读取原文块与定位坐标</td><td>path quote_id：string，必填<br>query cursor：string，可选<br>query limit：integer，可选<br>query block_id：string，可选</td><td>200 · <a href="#schema-QuoteSource">QuoteSource</a></td><td>按统一接口约定执行。</td></tr><tr><td><code>GET /quotes/{quote_id}/pages/{page}</code><br><small>getQuotePage</small></td><td>获取原文页面预览 PNG</td><td>path page：integer，必填<br>path quote_id：string，必填</td><td>200 · 二进制文件</td><td>页码从 1 开始。图片报价为 1 页；粘贴文字无图页，返回 404。bbox 为左上角原点的 [x,y,width,height]，范围 0..1。</td></tr></tbody></table><h4>提取 · 1 项</h4><table><thead><tr><th>接口类型 / 路径</th><th>功能</th><th>入参</th><th>出参</th><th>行为与约束</th></tr></thead><tbody><tr><td><code>POST /projects/{project_id}/extractions</code><br><small>startExtraction</small></td><td>异步提取报价内容</td><td>path project_id：string，必填<br>header Idempotency-Key：string，必填<br>JSON：<a href="#schema-ExtractionStart">ExtractionStart</a></td><td>202 · <a href="#schema-Job">Job</a></td><td>先本地解析 / OCR，再发文本块给当前服务商。任务保存 quote_ids 和源版本，不保存密钥。已核对报价必须 reset_existing_review=true。</td></tr></tbody></table><h4>核对与归并 · 6 项</h4><table><thead><tr><th>接口类型 / 路径</th><th>功能</th><th>入参</th><th>出参</th><th>行为与约束</th></tr></thead><tbody><tr><td><code>GET /quotes/{quote_id}/review</code><br><small>getReview</small></td><td>读取核对字段</td><td>path quote_id：string，必填</td><td>200 · <a href="#schema-Review">Review</a></td><td>按统一接口约定执行。</td></tr><tr><td><code>PUT /quotes/{quote_id}/review</code><br><small>saveReview</small></td><td>保存整份报价核对结果</td><td>path quote_id：string，必填<br>JSON：<a href="#schema-ReviewSave">ReviewSave</a></td><td>200 · <a href="#schema-Review">Review</a></td><td>完整替换可编辑事实；id=null 表示新增。原提取结果不可变。校验金额、SourceRef、字段类型；递增核对版本和项目版本，使旧确认失效。</td></tr><tr><td><code>POST /projects/{project_id}/alignment-jobs</code><br><small>startAlignment</small></td><td>异步生成全项目字段归并建议</td><td>path project_id：string，必填<br>header Idempotency-Key：string，必填<br>JSON：<a href="#schema-AlignmentStart">AlignmentStart</a></td><td>202 · <a href="#schema-Job">Job</a></td><td>汇总全部 active 报价字段。AI 只提建议；后端按语义与口径限制合并，不能丢字段。</td></tr><tr><td><code>GET /projects/{project_id}/field-mappings</code><br><small>getMappings</small></td><td>读取所有统一字段及对应关系</td><td>path project_id：string，必填</td><td>200 · <a href="#schema-Mappings">Mappings</a></td><td>按统一接口约定执行。</td></tr><tr><td><code>PUT /projects/{project_id}/field-mappings</code><br><small>saveMappings</small></td><td>确认、拆分、合并或重命名统一字段</td><td>path project_id：string，必填<br>JSON：<a href="#schema-MappingsSave">MappingsSave</a></td><td>200 · <a href="#schema-Mappings">Mappings</a></td><td>完整替换分组。全部事实必须且只能属于一个组；不同单价/合计、币种、单位、工项不允许硬合并；同一家多事实在一组时保留多值并标待确认。</td></tr><tr><td><code>POST /projects/{project_id}/review-confirmations</code><br><small>confirmReview</small></td><td>确认本项目核对和字段版本</td><td>path project_id：string，必填<br>header Idempotency-Key：string，必填<br>JSON：<a href="#schema-ConfirmationCreate">ConfirmationCreate</a></td><td>201 · <a href="#schema-Confirmation">Confirmation</a></td><td>quote_versions 必须覆盖当前项目全部报价。允许 pending 时其事实单独成组、对比中明确标待确认。确认记录不改变项目 revision。</td></tr></tbody></table><h4>对比 · 6 项</h4><table><thead><tr><th>接口类型 / 路径</th><th>功能</th><th>入参</th><th>出参</th><th>行为与约束</th></tr></thead><tbody><tr><td><code>POST /projects/{project_id}/comparisons</code><br><small>createComparison</small></td><td>生成不可变对比快照</td><td>path project_id：string，必填<br>header Idempotency-Key：string，必填<br>JSON：<a href="#schema-ComparisonCreate">ComparisonCreate</a></td><td>201 · <a href="#schema-Comparison">Comparison</a></td><td>至少 2 份报价。使用指定确认版本和全部报价字段；纯程序对比，无额外模型费用。保存源事实、原文与坐标副本。</td></tr><tr><td><code>GET /projects/{project_id}/comparisons</code><br><small>listComparisons</small></td><td>读取项目对比历史版本</td><td>path project_id：string，必填<br>query cursor：string，可选<br>query limit：integer，可选</td><td>200 · <a href="#schema-ComparisonHistory">ComparisonHistory</a></td><td>按统一接口约定执行。</td></tr><tr><td><code>GET /comparisons/{comparison_id}</code><br><small>getComparison</small></td><td>读取完整字段对比表</td><td>path comparison_id：string，必填</td><td>200 · <a href="#schema-Comparison">Comparison</a></td><td>按统一接口约定执行。</td></tr><tr><td><code>GET /comparisons/{comparison_id}/source</code><br><small>getComparisonSource</small></td><td>读取冻结快照中的原文依据</td><td>path comparison_id：string，必填<br>query cursor：string，可选<br>query limit：integer，可选<br>query quote_id：string，必填<br>query block_id：string，可选</td><td>200 · <a href="#schema-QuoteSource">QuoteSource</a></td><td>报价移除后仍可定位；读取快照保留的文本和预览资源。</td></tr><tr><td><code>GET /comparisons/{comparison_id}/quotes/{quote_id}/pages/{page}</code><br><small>getComparisonPage</small></td><td>获取快照保留的原文页 PNG</td><td>path page：integer，必填<br>path quote_id：string，必填<br>path comparison_id：string，必填</td><td>200 · 二进制文件</td><td>按统一接口约定执行。</td></tr><tr><td><code>GET /comparisons/{comparison_id}/flags</code><br><small>getFlags</small></td><td>读取差异、缺失和算术提示</td><td>path comparison_id：string，必填</td><td>200 · <a href="#schema-FlagList">FlagList</a></td><td>按统一接口约定执行。</td></tr></tbody></table><h4>草稿与报告 · 8 项</h4><table><thead><tr><th>接口类型 / 路径</th><th>功能</th><th>入参</th><th>出参</th><th>行为与约束</th></tr></thead><tbody><tr><td><code>GET /comparisons/{comparison_id}/questions</code><br><small>getQuestions</small></td><td>读取承包商追问列表</td><td>path comparison_id：string，必填<br>query quote_id：string，可选</td><td>200 · <a href="#schema-QuestionList">QuestionList</a></td><td>按统一接口约定执行。</td></tr><tr><td><code>POST /comparisons/{comparison_id}/draft-jobs</code><br><small>startDraft</small></td><td>异步生成追问邮件</td><td>path comparison_id：string，必填<br>header Idempotency-Key：string，必填<br>JSON：<a href="#schema-DraftStart">DraftStart</a></td><td>202 · <a href="#schema-Job">Job</a></td><td>问题必须属于该快照及承包商；生成新草稿，不覆盖用户改稿。默认只发送已选问题和必要项目摘要给模型。</td></tr><tr><td><code>GET /drafts/{draft_id}</code><br><small>getDraft</small></td><td>读取邮件草稿</td><td>path draft_id：string，必填</td><td>200 · <a href="#schema-Draft">Draft</a></td><td>按统一接口约定执行。</td></tr><tr><td><code>PUT /drafts/{draft_id}</code><br><small>saveDraft</small></td><td>保存修改后的邮件草稿</td><td>path draft_id：string，必填<br>JSON：<a href="#schema-DraftSave">DraftSave</a></td><td>200 · <a href="#schema-Draft">Draft</a></td><td>按统一接口约定执行。</td></tr><tr><td><code>POST /projects/{project_id}/reports</code><br><small>createReport</small></td><td>异步生成 PDF 或 CSV 报告</td><td>path project_id：string，必填<br>header Idempotency-Key：string，必填<br>JSON：<a href="#schema-ReportCreate">ReportCreate</a></td><td>202 · <a href="#schema-ReportAccepted">ReportAccepted</a></td><td>comparison_id 必须属于项目。使用不可变快照；不再次调用模型。include_pending=false 仅去掉追问附录中的待确认问题，主表仍保留所有字段并显示待确认。</td></tr><tr><td><code>GET /reports/{report_id}</code><br><small>getReport</small></td><td>读取报告生成状态与版本</td><td>path report_id：string，必填</td><td>200 · <a href="#schema-Report">Report</a></td><td>按统一接口约定执行。</td></tr><tr><td><code>GET /reports/{report_id}/preview</code><br><small>getReportPreview</small></td><td>读取报告预览数据</td><td>path report_id：string，必填</td><td>200 · <a href="#schema-ReportPreview">ReportPreview</a></td><td>仅 ready 可读，否则 409。与已生成文件使用同一份冻结渲染输入；地址隐藏同样应用于原文依据，不能从附录泄露。</td></tr><tr><td><code>GET /reports/{report_id}/file</code><br><small>downloadReport</small></td><td>下载报告二进制内容</td><td>path report_id：string，必填</td><td>200 · 二进制文件</td><td>实际 Content-Type 为 application/pdf 或 text/csv;charset=utf-8；Content-Disposition 给出安全文件名。前端主进程选择目录并保存，后端不接受任意写入路径。</td></tr></tbody></table><h4>模型设置 · 6 项</h4><table><thead><tr><th>接口类型 / 路径</th><th>功能</th><th>入参</th><th>出参</th><th>行为与约束</th></tr></thead><tbody><tr><td><code>GET /settings/providers</code><br><small>listProviders</small></td><td>获取三个固定服务商与预设模型</td><td>无业务入参</td><td>200 · <a href="#schema-ProviderList">ProviderList</a></td><td>按统一接口约定执行。</td></tr><tr><td><code>GET /settings/connection</code><br><small>getConnection</small></td><td>读取当前连接配置</td><td>无业务入参</td><td>200 · <a href="#schema-Connection">Connection</a></td><td>只回传 has_key / 末四位；绝不回传原始 API Key。</td></tr><tr><td><code>PUT /settings/connection/provider</code><br><small>switchProvider</small></td><td>切换服务商并清除旧密钥</td><td>JSON：<a href="#schema-ProviderSwitch">ProviderSwitch</a></td><td>200 · <a href="#schema-Connection">Connection</a></td><td>无活动模型任务才可切换；事务中清除旧 Keychain 条目和余额缓存，并增加配置版本。相同服务商为无操作，不清除当前密钥。</td></tr><tr><td><code>PUT /settings/connection</code><br><small>saveConnection</small></td><td>保存当前服务商的 API Key</td><td>JSON：<a href="#schema-ConnectionSave">ConnectionSave</a></td><td>200 · <a href="#schema-Connection">Connection</a></td><td>provider 必须与当前配置相同。新密钥也增加 connection generation，用量按连接代际分开。失败不降级为明文保存。</td></tr><tr><td><code>DELETE /settings/connection</code><br><small>clearConnectionKey</small></td><td>清除当前密钥</td><td>query expected_revision：integer，必填</td><td>200 · <a href="#schema-Connection">Connection</a></td><td>保留服务商枚举；无活动模型任务才可清除。</td></tr><tr><td><code>POST /settings/connection/test</code><br><small>testConnection</small></td><td>异步测试当前模型连接</td><td>header Idempotency-Key：string，必填<br>JSON：<a href="#schema-ConnectionTest">ConnectionTest</a></td><td>202 · <a href="#schema-Job">Job</a></td><td>使用输入密钥或已保存密钥，最小文本请求；不落库测试密钥。仅已保存密钥的调用归入当前连接代际；未保存密钥用 ephemeral 标记且不计入默认当前连接汇总。测试可能产生少量费用。</td></tr></tbody></table><h4>用量与费用 · 5 项</h4><table><thead><tr><th>接口类型 / 路径</th><th>功能</th><th>入参</th><th>出参</th><th>行为与约束</th></tr></thead><tbody><tr><td><code>GET /usage/summary</code><br><small>getUsageSummary</small></td><td>读取本 App 的调用与费用汇总</td><td>query from：string (date-time)，必填<br>query to：string (date-time)，必填<br>query provider：string：openai | claude | deepseek，可选<br>query connection_generation：integer，可选</td><td>200 · <a href="#schema-UsageSummary">UsageSummary</a></td><td>半开区间 [from,to)，from&lt;to，跨度最多 366 天。默认当前服务商、当前已保存连接代际；unknown 不作为零。跨币种分别汇总，含重试和已保存密钥连接测试。</td></tr><tr><td><code>GET /usage/calls</code><br><small>listUsageCalls</small></td><td>读取调用明细</td><td>query from：string (date-time)，必填<br>query to：string (date-time)，必填<br>query provider：string：openai | claude | deepseek，可选<br>query connection_generation：integer，可选<br>query cursor：string，可选<br>query limit：integer，可选</td><td>200 · <a href="#schema-UsageCallsPage">UsageCallsPage</a></td><td>按统一接口约定执行。</td></tr><tr><td><code>GET /usage/pricing</code><br><small>getPricing</small></td><td>读取当前预设模型的价格表</td><td>无业务入参</td><td>200 · <a href="#schema-Pricing">Pricing</a></td><td>随版本发布的价格清单，保留查询时间与来源；超过 7 天标 stale，此后估算置空。分缓存输入、输出及峰谷条件，不抓取网页猜价格。</td></tr><tr><td><code>GET /usage/balance</code><br><small>getBalance</small></td><td>读取当前连接的账户余额缓存</td><td>无业务入参</td><td>200 · <a href="#schema-Balance">Balance</a></td><td>DeepSeek 支持接口时显示余额；其他首版 unsupported。超过 5 分钟显示 stale，不通过本 App 支出倒推账户余额。</td></tr><tr><td><code>POST /usage/balance/refresh</code><br><small>refreshBalance</small></td><td>刷新服务商账户余额</td><td>header Idempotency-Key：string，必填</td><td>200 · <a href="#schema-Balance">Balance</a></td><td>调用官方余额接口，10 秒超时；不支持返回 unsupported，没有密钥返回 not_configured，失败返回 unavailable；这些是正常 200 状态，绝不伪造余额。</td></tr></tbody></table></section><h3>2.8 关键接口 JSON 示例</h3><p>以下为示例 ID 与示例数据，服务端版本号以实际响应为准。</p><h4>创建项目 · <code>POST /projects</code></h4><pre><code>{
   &quot;name&quot;: &quot;厨房维修&quot;,

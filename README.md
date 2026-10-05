@@ -11,6 +11,7 @@
 - [完整技术方案（HTML）](docs/technical/QuoteCompare-technical-design-v1.html)
 - [后端架构图](docs/technical/QuoteCompare-backend-architecture.svg)
 - [OpenAPI 接口定义](docs/technical/QuoteCompare-openapi-v1.json)
+- [SQLite 完整建表 SQL（14 张表）](docs/technical/database-schema.sql)
 
 技术方案保留现有 HTML 格式。下载仓库后，用浏览器打开该文件即可阅读；其中内嵌七张产品图，包含前端代码组织、界面调用表和后端接口设计。
 
