@@ -20,3 +20,8 @@ __pycache__/
 *.log
 tmp/
 .cache/
+
+.superpowers/
+release/
+artifacts/
+.pyinstaller/
