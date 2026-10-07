@@ -1,0 +1,4257 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "QuoteCompare 简化首版接口",
+    "version": "2.0.0-design",
+    "description": "设计文档；尚未实现。与 v1 契约不同，首版按本方案实现，不承诺旧 API 兼容。"
+  },
+  "servers": [
+    {
+      "url": "http://127.0.0.1:{port}/api/v1",
+      "variables": {
+        "port": {
+          "default": "8765"
+        }
+      }
+    }
+  ],
+  "security": [
+    {
+      "LocalSession": []
+    }
+  ],
+  "paths": {
+    "/health": {
+      "get": {
+        "operationId": "lean1",
+        "summary": "启动检查",
+        "description": "",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "错误；400 参数错误、404 资源不存在、409 版本/任务冲突、413 超限、422 业务数据未就绪、502 模型失败",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/projects": {
+      "get": {
+        "operationId": "lean2",
+        "summary": "项目列表",
+        "description": "",
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "下一页游标"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "description": "每页数量",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectPage"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "错误；400 参数错误、404 资源不存在、409 版本/任务冲突、413 超限、422 业务数据未就绪、502 模型失败",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "lean3",
+        "summary": "创建项目",
+        "description": "request_id 作为项目 ID；相同 ID 与输入复用响应，不同输入返回 409。",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Project"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "错误；400 参数错误、404 资源不存在、409 版本/任务冲突、413 超限、422 业务数据未就绪、502 模型失败",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/projects/{project_id}": {
+      "get": {
+        "operationId": "lean4",
+        "summary": "打开项目与报价列表",
+        "description": "",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "本地对象编号",
+              "minLength": 1,
+              "maxLength": 80
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectDetail"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "错误；400 参数错误、404 资源不存在、409 版本/任务冲突、413 超限、422 业务数据未就绪、502 模型失败",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "operationId": "lean5",
+        "summary": "编辑项目或归档",
+        "description": "",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "本地对象编号",
+              "minLength": 1,
+              "maxLength": 80
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Project"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "错误；400 参数错误、404 资源不存在、409 版本/任务冲突、413 超限、422 业务数据未就绪、502 模型失败",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "lean6",
+        "summary": "删除项目",
+        "description": "",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "本地对象编号",
+              "minLength": 1,
+              "maxLength": 80
+            }
+          },
+          {
+            "name": "expected_revision",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "description": "内部数据版本；用于检测过期修改",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "成功"
+          },
+          "default": {
+            "description": "错误；400 参数错误、404 资源不存在、409 版本/任务冲突、413 超限、422 业务数据未就绪、502 模型失败",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/projects/{project_id}/quotes": {
+      "post": {
+        "operationId": "lean7",
+        "summary": "导入文件或粘贴文字",
+        "description": "multipart/form-data；source_type 决定 file/text；最多五份、50MB、30 页。request_id 作为报价 ID，内容哈希防重复。",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "本地对象编号",
+              "minLength": 1,
+              "maxLength": 80
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/QuoteImport"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuoteDetail"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "错误；400 参数错误、404 资源不存在、409 版本/任务冲突、413 超限、422 业务数据未就绪、502 模型失败",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/quotes/{quote_id}": {
+      "get": {
+        "operationId": "lean8",
+        "summary": "原文依据和核对数据",
+        "description": "",
+        "parameters": [
+          {
+            "name": "quote_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "本地对象编号",
+              "minLength": 1,
+              "maxLength": 80
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuoteDetail"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "错误；400 参数错误、404 资源不存在、409 版本/任务冲突、413 超限、422 业务数据未就绪、502 模型失败",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "operationId": "lean9",
+        "summary": "保存承包商名称或核对字段",
+        "description": "facts 全量替换当前人工核对数据；原始提取与原文保留。",
+        "parameters": [
+          {
+            "name": "quote_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "本地对象编号",
+              "minLength": 1,
+              "maxLength": 80
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QuoteUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuoteDetail"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "错误；400 参数错误、404 资源不存在、409 版本/任务冲突、413 超限、422 业务数据未就绪、502 模型失败",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "lean10",
+        "summary": "删除当前报价",
+        "description": "历史对比中的原文副本保留。",
+        "parameters": [
+          {
+            "name": "quote_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "本地对象编号",
+              "minLength": 1,
+              "maxLength": 80
+            }
+          },
+          {
+            "name": "expected_revision",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "description": "内部数据版本；用于检测过期修改",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "成功"
+          },
+          "default": {
+            "description": "错误；400 参数错误、404 资源不存在、409 版本/任务冲突、413 超限、422 业务数据未就绪、502 模型失败",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/jobs": {
+      "post": {
+        "operationId": "lean11",
+        "summary": "启动后台处理",
+        "description": "统一入口；按 kind 验证不同参数，不接受与任务类型无关的字段。request_id 全局唯一，同参数复用、不同参数 409。",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JobCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Job"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "错误；400 参数错误、404 资源不存在、409 版本/任务冲突、413 超限、422 业务数据未就绪、502 模型失败",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/jobs/{job_id}": {
+      "get": {
+        "operationId": "lean12",
+        "summary": "查询进度和结果",
+        "description": "",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "本地对象编号",
+              "minLength": 1,
+              "maxLength": 80
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Job"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "错误；400 参数错误、404 资源不存在、409 版本/任务冲突、413 超限、422 业务数据未就绪、502 模型失败",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/jobs/{job_id}/cancel": {
+      "post": {
+        "operationId": "lean13",
+        "summary": "请求取消任务",
+        "description": "取消不能保证撤回已经发出的模型请求，已发生用量照常记录。",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "本地对象编号",
+              "minLength": 1,
+              "maxLength": 80
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Job"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "错误；400 参数错误、404 资源不存在、409 版本/任务冲突、413 超限、422 业务数据未就绪、502 模型失败",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/projects/{project_id}/field-mappings": {
+      "get": {
+        "operationId": "lean14",
+        "summary": "查看统一字段",
+        "description": "",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "本地对象编号",
+              "minLength": 1,
+              "maxLength": 80
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mappings"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "错误；400 参数错误、404 资源不存在、409 版本/任务冲突、413 超限、422 业务数据未就绪、502 模型失败",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "lean15",
+        "summary": "保存字段归并",
+        "description": "",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "本地对象编号",
+              "minLength": 1,
+              "maxLength": 80
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MappingsSave"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mappings"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "错误；400 参数错误、404 资源不存在、409 版本/任务冲突、413 超限、422 业务数据未就绪、502 模型失败",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/projects/{project_id}/comparisons": {
+      "post": {
+        "operationId": "lean16",
+        "summary": "确认并生成对比快照",
+        "description": "合并确认与生成；至少两份报价。需全部事实归组且映射对应当前 revision；有 pending 默认 422，allow_pending=true 时保留待确认标记。",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "本地对象编号",
+              "minLength": 1,
+              "maxLength": 80
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ComparisonCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ComparisonDetail"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "错误；400 参数错误、404 资源不存在、409 版本/任务冲突、413 超限、422 业务数据未就绪、502 模型失败",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "operationId": "lean17",
+        "summary": "历史对比列表",
+        "description": "",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "本地对象编号",
+              "minLength": 1,
+              "maxLength": 80
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "下一页游标"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "description": "每页数量",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ComparisonPage"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "错误；400 参数错误、404 资源不存在、409 版本/任务冲突、413 超限、422 业务数据未就绪、502 模型失败",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/comparisons/{comparison_id}": {
+      "get": {
+        "operationId": "lean18",
+        "summary": "对比表、风险、追问与依据",
+        "description": "",
+        "parameters": [
+          {
+            "name": "comparison_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "本地对象编号",
+              "minLength": 1,
+              "maxLength": 80
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ComparisonDetail"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "错误；400 参数错误、404 资源不存在、409 版本/任务冲突、413 超限、422 业务数据未就绪、502 模型失败",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/drafts/{draft_id}": {
+      "get": {
+        "operationId": "lean19",
+        "summary": "打开追问草稿",
+        "description": "",
+        "parameters": [
+          {
+            "name": "draft_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "本地对象编号",
+              "minLength": 1,
+              "maxLength": 80
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Draft"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "错误；400 参数错误、404 资源不存在、409 版本/任务冲突、413 超限、422 业务数据未就绪、502 模型失败",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "operationId": "lean20",
+        "summary": "保存修改后的草稿",
+        "description": "",
+        "parameters": [
+          {
+            "name": "draft_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "本地对象编号",
+              "minLength": 1,
+              "maxLength": 80
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DraftUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Draft"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "错误；400 参数错误、404 资源不存在、409 版本/任务冲突、413 超限、422 业务数据未就绪、502 模型失败",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/files/{file_id}": {
+      "get": {
+        "operationId": "lean21",
+        "summary": "读取原文、页图、报告或预览文件",
+        "description": "file_id 必须在内部文件清单中；返回对应 MIME 类型，禁止接受任意路径。预览 HTML 禁用脚本；下载由 Electron 保存对话框完成。",
+        "parameters": [
+          {
+            "name": "file_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "本地对象编号",
+              "minLength": 1,
+              "maxLength": 80
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/pdf": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "text/csv": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "image/png": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "image/jpeg": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "text/html": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "错误；400 参数错误、404 资源不存在、409 版本/任务冲突、413 超限、422 业务数据未就绪、502 模型失败",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/settings": {
+      "get": {
+        "operationId": "lean22",
+        "summary": "读取当前模型设置与预设价格",
+        "description": "",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Settings"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "错误；400 参数错误、404 资源不存在、409 版本/任务冲突、413 超限、422 业务数据未就绪、502 模型失败",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "lean23",
+        "summary": "选择服务商、保存或删除当前密钥",
+        "description": "切换 provider 时先清除旧密钥引用和余额缓存；未传新 key 则为未配置。使用持久化配置 revision 检测旧请求；正在使用密钥的模型任务结束或取消前返回 409。",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SettingsSave"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Settings"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "错误；400 参数错误、404 资源不存在、409 版本/任务冲突、413 超限、422 业务数据未就绪、502 模型失败",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/usage": {
+      "get": {
+        "operationId": "lean24",
+        "summary": "用量汇总与调用记录",
+        "description": "",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "UTC 时间",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "UTC 时间",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "provider",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "服务商",
+              "enum": [
+                "openai",
+                "claude",
+                "deepseek"
+              ]
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "下一页游标"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "description": "每页数量",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsageReport"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "错误；400 参数错误、404 资源不存在、409 版本/任务冲突、413 超限、422 业务数据未就绪、502 模型失败",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/balance": {
+      "get": {
+        "operationId": "lean25",
+        "summary": "当前服务商账户余额",
+        "description": "DeepSeek 查询官方余额；其他两家首版返回 unsupported。缓存超过五分钟标 stale；余额未知不填零。",
+        "parameters": [
+          {
+            "name": "refresh",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Balance"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "错误；400 参数错误、404 资源不存在、409 版本/任务冲突、413 超限、422 业务数据未就绪、502 模型失败",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Project": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "本地对象编号",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "name": {
+            "type": "string",
+            "description": "项目名称",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "property": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": "房产名称或地址",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "scope": {
+            "type": "string",
+            "description": "施工需求，例如更换橱柜、保留地板、包含清运",
+            "maxLength": 4000
+          },
+          "currency": {
+            "type": "string",
+            "description": "比较币种",
+            "pattern": "^[A-Z]{3}$"
+          },
+          "status": {
+            "type": "string",
+            "description": "项目状态",
+            "enum": [
+              "active",
+              "completed",
+              "archived"
+            ]
+          },
+          "revision": {
+            "type": "integer",
+            "description": "内部数据版本；用于检测过期修改",
+            "minimum": 1
+          },
+          "created_at": {
+            "type": "string",
+            "description": "UTC 时间",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "description": "UTC 时间",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "property",
+          "scope",
+          "currency",
+          "status",
+          "revision",
+          "created_at",
+          "updated_at"
+        ],
+        "additionalProperties": false,
+        "description": ""
+      },
+      "ProjectPage": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Project"
+            }
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": ""
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "additionalProperties": false,
+        "description": ""
+      },
+      "ProjectCreate": {
+        "type": "object",
+        "properties": {
+          "request_id": {
+            "type": "string",
+            "description": "本地对象编号",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "name": {
+            "type": "string",
+            "description": "项目名称",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "property": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": "房产名称或地址",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "scope": {
+            "type": "string",
+            "description": "施工需求，例如更换橱柜、保留地板、包含清运",
+            "maxLength": 4000
+          },
+          "currency": {
+            "type": "string",
+            "description": "比较币种",
+            "pattern": "^[A-Z]{3}$"
+          }
+        },
+        "required": [
+          "request_id",
+          "name",
+          "scope",
+          "currency"
+        ],
+        "additionalProperties": false,
+        "description": ""
+      },
+      "ProjectUpdate": {
+        "type": "object",
+        "properties": {
+          "expected_revision": {
+            "type": "integer",
+            "description": "内部数据版本；用于检测过期修改",
+            "minimum": 1
+          },
+          "name": {
+            "type": "string",
+            "description": "项目名称",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "property": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": "房产名称或地址",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "scope": {
+            "type": "string",
+            "description": "施工需求，例如更换橱柜、保留地板、包含清运",
+            "maxLength": 4000
+          },
+          "status": {
+            "type": "string",
+            "description": "项目状态",
+            "enum": [
+              "active",
+              "completed",
+              "archived"
+            ]
+          }
+        },
+        "required": [
+          "expected_revision"
+        ],
+        "additionalProperties": false,
+        "description": ""
+      },
+      "QuoteSummary": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "本地对象编号",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "project_id": {
+            "type": "string",
+            "description": "本地对象编号",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "contractor_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": ""
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "filename": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": ""
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source_type": {
+            "type": "string",
+            "description": "",
+            "enum": [
+              "pdf",
+              "image",
+              "text"
+            ]
+          },
+          "page_count": {
+            "type": "integer",
+            "description": "",
+            "minimum": 0,
+            "maximum": 30
+          },
+          "status": {
+            "type": "string",
+            "description": "",
+            "enum": [
+              "imported",
+              "extracting",
+              "review_required",
+              "reviewed",
+              "failed"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "contractor_name",
+          "filename",
+          "source_type",
+          "page_count",
+          "status"
+        ],
+        "additionalProperties": false,
+        "description": ""
+      },
+      "ProjectDetail": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "本地对象编号",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "name": {
+            "type": "string",
+            "description": "项目名称",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "property": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": "房产名称或地址",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "scope": {
+            "type": "string",
+            "description": "施工需求，例如更换橱柜、保留地板、包含清运",
+            "maxLength": 4000
+          },
+          "currency": {
+            "type": "string",
+            "description": "比较币种",
+            "pattern": "^[A-Z]{3}$"
+          },
+          "status": {
+            "type": "string",
+            "description": "项目状态",
+            "enum": [
+              "active",
+              "completed",
+              "archived"
+            ]
+          },
+          "revision": {
+            "type": "integer",
+            "description": "内部数据版本；用于检测过期修改",
+            "minimum": 1
+          },
+          "created_at": {
+            "type": "string",
+            "description": "UTC 时间",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "description": "UTC 时间",
+            "format": "date-time"
+          },
+          "quotes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/QuoteSummary"
+            },
+            "maxItems": 5
+          },
+          "field_groups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FieldGroup"
+            }
+          },
+          "mappings_revision": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "description": "内部数据版本；用于检测过期修改",
+                "minimum": 1
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "property",
+          "scope",
+          "currency",
+          "status",
+          "revision",
+          "created_at",
+          "updated_at",
+          "quotes",
+          "field_groups",
+          "mappings_revision"
+        ],
+        "additionalProperties": false,
+        "description": ""
+      },
+      "QuoteDetail": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "本地对象编号",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "project_id": {
+            "type": "string",
+            "description": "本地对象编号",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "contractor_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": ""
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "filename": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": ""
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source_type": {
+            "type": "string",
+            "description": "",
+            "enum": [
+              "pdf",
+              "image",
+              "text"
+            ]
+          },
+          "page_count": {
+            "type": "integer",
+            "description": "",
+            "minimum": 0,
+            "maximum": 30
+          },
+          "status": {
+            "type": "string",
+            "description": "",
+            "enum": [
+              "imported",
+              "extracting",
+              "review_required",
+              "reviewed",
+              "failed"
+            ]
+          },
+          "project_revision": {
+            "type": "integer",
+            "description": "内部数据版本；用于检测过期修改",
+            "minimum": 1
+          },
+          "original_file_id": {
+            "type": "string",
+            "description": "本地对象编号",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "page_file_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "description": "本地对象编号",
+              "minLength": 1,
+              "maxLength": 80
+            }
+          },
+          "source_blocks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SourceBlock"
+            }
+          },
+          "extracted_facts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Fact"
+            }
+          },
+          "facts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Fact"
+            }
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "description": ""
+            }
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "contractor_name",
+          "filename",
+          "source_type",
+          "page_count",
+          "status",
+          "project_revision",
+          "original_file_id",
+          "page_file_ids",
+          "source_blocks",
+          "extracted_facts",
+          "facts",
+          "warnings"
+        ],
+        "additionalProperties": false,
+        "description": ""
+      },
+      "QuoteImport": {
+        "type": "object",
+        "properties": {
+          "expected_revision": {
+            "type": "integer",
+            "description": "内部数据版本；用于检测过期修改",
+            "minimum": 1
+          },
+          "request_id": {
+            "type": "string",
+            "description": "本地对象编号",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "source_type": {
+            "type": "string",
+            "description": "",
+            "enum": [
+              "pdf",
+              "image",
+              "text"
+            ]
+          },
+          "file": {
+            "type": "string",
+            "description": "PDF 或图片；file 和 text 二选一",
+            "format": "binary"
+          },
+          "text": {
+            "type": "string",
+            "description": "粘贴文字；file 和 text 二选一",
+            "minLength": 1,
+            "maxLength": 100000
+          },
+          "contractor_name": {
+            "type": "string",
+            "description": "",
+            "maxLength": 200
+          }
+        },
+        "required": [
+          "expected_revision",
+          "request_id",
+          "source_type"
+        ],
+        "additionalProperties": false,
+        "description": "",
+        "oneOf": [
+          {
+            "properties": {
+              "source_type": {
+                "enum": [
+                  "pdf",
+                  "image"
+                ]
+              }
+            },
+            "required": [
+              "file"
+            ],
+            "not": {
+              "required": [
+                "text"
+              ]
+            }
+          },
+          {
+            "properties": {
+              "source_type": {
+                "const": "text"
+              }
+            },
+            "required": [
+              "text"
+            ],
+            "not": {
+              "required": [
+                "file"
+              ]
+            }
+          }
+        ]
+      },
+      "QuoteUpdate": {
+        "type": "object",
+        "properties": {
+          "expected_revision": {
+            "type": "integer",
+            "description": "内部数据版本；用于检测过期修改",
+            "minimum": 1
+          },
+          "contractor_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": "",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "facts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Fact"
+            }
+          }
+        },
+        "required": [
+          "expected_revision"
+        ],
+        "additionalProperties": false,
+        "description": ""
+      },
+      "Mappings": {
+        "type": "object",
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "description": "本地对象编号",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "project_revision": {
+            "type": "integer",
+            "description": "内部数据版本；用于检测过期修改",
+            "minimum": 1
+          },
+          "mappings_revision": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "description": "内部数据版本；用于检测过期修改",
+                "minimum": 1
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "groups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FieldGroup"
+            }
+          }
+        },
+        "required": [
+          "project_id",
+          "project_revision",
+          "mappings_revision",
+          "groups"
+        ],
+        "additionalProperties": false,
+        "description": ""
+      },
+      "MappingsSave": {
+        "type": "object",
+        "properties": {
+          "expected_revision": {
+            "type": "integer",
+            "description": "内部数据版本；用于检测过期修改",
+            "minimum": 1
+          },
+          "groups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FieldGroup"
+            }
+          }
+        },
+        "required": [
+          "expected_revision",
+          "groups"
+        ],
+        "additionalProperties": false,
+        "description": ""
+      },
+      "ComparisonCreate": {
+        "type": "object",
+        "properties": {
+          "expected_revision": {
+            "type": "integer",
+            "description": "内部数据版本；用于检测过期修改",
+            "minimum": 1
+          },
+          "request_id": {
+            "type": "string",
+            "description": "本地对象编号",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "allow_pending": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "expected_revision",
+          "request_id"
+        ],
+        "additionalProperties": false,
+        "description": ""
+      },
+      "SnapshotSource": {
+        "type": "object",
+        "properties": {
+          "quote_id": {
+            "type": "string",
+            "description": "本地对象编号",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "contractor_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": ""
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "original_file_id": {
+            "type": "string",
+            "description": "本地对象编号",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "page_file_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "description": "本地对象编号",
+              "minLength": 1,
+              "maxLength": 80
+            }
+          },
+          "blocks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SourceBlock"
+            }
+          },
+          "facts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Fact"
+            }
+          }
+        },
+        "required": [
+          "quote_id",
+          "contractor_name",
+          "original_file_id",
+          "page_file_ids",
+          "blocks",
+          "facts"
+        ],
+        "additionalProperties": false,
+        "description": ""
+      },
+      "ComparisonDetail": {
+        "type": "object",
+        "properties": {
+          "comparison": {
+            "$ref": "#/components/schemas/Comparison"
+          },
+          "project": {
+            "$ref": "#/components/schemas/Project"
+          },
+          "flags": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Flag"
+            }
+          },
+          "questions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Question"
+            }
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SnapshotSource"
+            },
+            "minItems": 2,
+            "maxItems": 5
+          }
+        },
+        "required": [
+          "comparison",
+          "project",
+          "flags",
+          "questions",
+          "sources"
+        ],
+        "additionalProperties": false,
+        "description": ""
+      },
+      "ComparisonPage": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Comparison"
+            }
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": ""
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "additionalProperties": false,
+        "description": ""
+      },
+      "Draft": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "本地对象编号",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "project_id": {
+            "type": "string",
+            "description": "本地对象编号",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "comparison_id": {
+            "type": "string",
+            "description": "本地对象编号",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "quote_id": {
+            "type": "string",
+            "description": "本地对象编号",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "language": {
+            "type": "string",
+            "description": "",
+            "enum": [
+              "zh-CN",
+              "en"
+            ]
+          },
+          "question_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "description": "本地对象编号",
+              "minLength": 1,
+              "maxLength": 80
+            }
+          },
+          "subject": {
+            "type": "string",
+            "description": "",
+            "maxLength": 500
+          },
+          "body": {
+            "type": "string",
+            "description": "",
+            "maxLength": 20000
+          },
+          "revision": {
+            "type": "integer",
+            "description": "内部数据版本；用于检测过期修改",
+            "minimum": 1
+          },
+          "updated_at": {
+            "type": "string",
+            "description": "UTC 时间",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "comparison_id",
+          "quote_id",
+          "language",
+          "question_ids",
+          "subject",
+          "body",
+          "revision",
+          "updated_at"
+        ],
+        "additionalProperties": false,
+        "description": ""
+      },
+      "DraftUpdate": {
+        "type": "object",
+        "properties": {
+          "expected_revision": {
+            "type": "integer",
+            "description": "内部数据版本；用于检测过期修改",
+            "minimum": 1
+          },
+          "subject": {
+            "type": "string",
+            "description": "",
+            "maxLength": 500
+          },
+          "body": {
+            "type": "string",
+            "description": "",
+            "maxLength": 20000
+          }
+        },
+        "required": [
+          "expected_revision"
+        ],
+        "additionalProperties": false,
+        "description": ""
+      },
+      "ReportOptions": {
+        "type": "object",
+        "properties": {
+          "format": {
+            "type": "string",
+            "description": "",
+            "enum": [
+              "pdf",
+              "csv"
+            ]
+          },
+          "include_sources": {
+            "type": "boolean"
+          },
+          "include_questions": {
+            "type": "boolean"
+          },
+          "hide_property": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "format"
+        ],
+        "additionalProperties": false,
+        "description": ""
+      },
+      "JobCreate": {
+        "type": "object",
+        "properties": {
+          "request_id": {
+            "type": "string",
+            "description": "本地对象编号",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "kind": {
+            "type": "string",
+            "description": "",
+            "enum": [
+              "extraction",
+              "alignment",
+              "draft",
+              "report",
+              "connection_test"
+            ]
+          },
+          "project_id": {
+            "type": "string",
+            "description": "本地对象编号",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "expected_revision": {
+            "type": "integer",
+            "description": "内部数据版本；用于检测过期修改",
+            "minimum": 1
+          },
+          "quote_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "description": "本地对象编号",
+              "minLength": 1,
+              "maxLength": 80
+            },
+            "minItems": 1,
+            "maxItems": 5
+          },
+          "comparison_id": {
+            "type": "string",
+            "description": "本地对象编号",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "quote_id": {
+            "type": "string",
+            "description": "本地对象编号",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "question_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "description": "本地对象编号",
+              "minLength": 1,
+              "maxLength": 80
+            },
+            "minItems": 1
+          },
+          "language": {
+            "type": "string",
+            "description": "",
+            "enum": [
+              "zh-CN",
+              "en"
+            ]
+          },
+          "report_options": {
+            "$ref": "#/components/schemas/ReportOptions"
+          },
+          "replace_reviewed": {
+            "type": "boolean",
+            "default": false,
+            "description": "仅提取任务：用户明确确认后才替换已有人工核对数据"
+          },
+          "expected_connection_revision": {
+            "type": "integer",
+            "description": "内部数据版本；用于检测过期修改",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "request_id",
+          "kind"
+        ],
+        "additionalProperties": false,
+        "description": "",
+        "oneOf": [
+          {
+            "properties": {
+              "kind": {
+                "const": "extraction"
+              }
+            },
+            "required": [
+              "project_id",
+              "expected_revision",
+              "quote_ids"
+            ],
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "comparison_id"
+                  ]
+                },
+                {
+                  "required": [
+                    "expected_connection_revision"
+                  ]
+                },
+                {
+                  "required": [
+                    "language"
+                  ]
+                },
+                {
+                  "required": [
+                    "question_ids"
+                  ]
+                },
+                {
+                  "required": [
+                    "quote_id"
+                  ]
+                },
+                {
+                  "required": [
+                    "report_options"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "properties": {
+              "kind": {
+                "const": "alignment"
+              }
+            },
+            "required": [
+              "project_id",
+              "expected_revision"
+            ],
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "comparison_id"
+                  ]
+                },
+                {
+                  "required": [
+                    "expected_connection_revision"
+                  ]
+                },
+                {
+                  "required": [
+                    "language"
+                  ]
+                },
+                {
+                  "required": [
+                    "question_ids"
+                  ]
+                },
+                {
+                  "required": [
+                    "quote_id"
+                  ]
+                },
+                {
+                  "required": [
+                    "quote_ids"
+                  ]
+                },
+                {
+                  "required": [
+                    "replace_reviewed"
+                  ]
+                },
+                {
+                  "required": [
+                    "report_options"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "properties": {
+              "kind": {
+                "const": "draft"
+              }
+            },
+            "required": [
+              "project_id",
+              "comparison_id",
+              "quote_id",
+              "question_ids",
+              "language"
+            ],
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "expected_connection_revision"
+                  ]
+                },
+                {
+                  "required": [
+                    "expected_revision"
+                  ]
+                },
+                {
+                  "required": [
+                    "quote_ids"
+                  ]
+                },
+                {
+                  "required": [
+                    "replace_reviewed"
+                  ]
+                },
+                {
+                  "required": [
+                    "report_options"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "properties": {
+              "kind": {
+                "const": "report"
+              }
+            },
+            "required": [
+              "project_id",
+              "comparison_id",
+              "report_options"
+            ],
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "expected_connection_revision"
+                  ]
+                },
+                {
+                  "required": [
+                    "expected_revision"
+                  ]
+                },
+                {
+                  "required": [
+                    "language"
+                  ]
+                },
+                {
+                  "required": [
+                    "question_ids"
+                  ]
+                },
+                {
+                  "required": [
+                    "quote_id"
+                  ]
+                },
+                {
+                  "required": [
+                    "quote_ids"
+                  ]
+                },
+                {
+                  "required": [
+                    "replace_reviewed"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "properties": {
+              "kind": {
+                "const": "connection_test"
+              }
+            },
+            "required": [
+              "expected_connection_revision"
+            ],
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "comparison_id"
+                  ]
+                },
+                {
+                  "required": [
+                    "expected_revision"
+                  ]
+                },
+                {
+                  "required": [
+                    "language"
+                  ]
+                },
+                {
+                  "required": [
+                    "project_id"
+                  ]
+                },
+                {
+                  "required": [
+                    "question_ids"
+                  ]
+                },
+                {
+                  "required": [
+                    "quote_id"
+                  ]
+                },
+                {
+                  "required": [
+                    "quote_ids"
+                  ]
+                },
+                {
+                  "required": [
+                    "replace_reviewed"
+                  ]
+                },
+                {
+                  "required": [
+                    "report_options"
+                  ]
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "JobResult": {
+        "type": "object",
+        "properties": {
+          "quote_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "description": "本地对象编号",
+              "minLength": 1,
+              "maxLength": 80
+            }
+          },
+          "mappings_revision": {
+            "type": "integer",
+            "description": "内部数据版本；用于检测过期修改",
+            "minimum": 1
+          },
+          "draft_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "description": "本地对象编号",
+              "minLength": 1,
+              "maxLength": 80
+            }
+          },
+          "preview_file_id": {
+            "type": "string",
+            "description": "本地对象编号",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "report_file_id": {
+            "type": "string",
+            "description": "本地对象编号",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "test_succeeded": {
+            "type": "boolean"
+          },
+          "message": {
+            "type": "string",
+            "description": ""
+          }
+        },
+        "required": [],
+        "additionalProperties": false,
+        "description": ""
+      },
+      "Job": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "本地对象编号",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": "本地对象编号",
+                "minLength": 1,
+                "maxLength": 80
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "kind": {
+            "type": "string",
+            "description": "",
+            "enum": [
+              "extraction",
+              "alignment",
+              "draft",
+              "report",
+              "connection_test"
+            ]
+          },
+          "state": {
+            "type": "string",
+            "description": "",
+            "enum": [
+              "queued",
+              "running",
+              "succeeded",
+              "partial_failed",
+              "failed",
+              "cancel_requested",
+              "cancelled",
+              "interrupted"
+            ]
+          },
+          "stage": {
+            "type": "string",
+            "description": ""
+          },
+          "completed_units": {
+            "type": "integer",
+            "description": "",
+            "minimum": 0
+          },
+          "total_units": {
+            "type": "integer",
+            "description": "",
+            "minimum": 0
+          },
+          "result": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/JobResult"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Error"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "description": "UTC 时间",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "description": "UTC 时间",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "kind",
+          "state",
+          "stage",
+          "completed_units",
+          "total_units",
+          "result",
+          "error",
+          "created_at",
+          "updated_at"
+        ],
+        "additionalProperties": false,
+        "description": ""
+      },
+      "Settings": {
+        "type": "object",
+        "properties": {
+          "provider": {
+            "type": "string",
+            "description": "服务商",
+            "enum": [
+              "openai",
+              "claude",
+              "deepseek"
+            ]
+          },
+          "model_id": {
+            "type": "string",
+            "description": "按服务商预设，只读"
+          },
+          "has_key": {
+            "type": "boolean"
+          },
+          "key_hint": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": "仅末四位"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "revision": {
+            "type": "integer",
+            "description": "内部数据版本；用于检测过期修改",
+            "minimum": 1
+          },
+          "pricing": {
+            "$ref": "#/components/schemas/Pricing"
+          }
+        },
+        "required": [
+          "provider",
+          "model_id",
+          "has_key",
+          "key_hint",
+          "revision",
+          "pricing"
+        ],
+        "additionalProperties": false,
+        "description": ""
+      },
+      "SettingsSave": {
+        "type": "object",
+        "properties": {
+          "expected_revision": {
+            "type": "integer",
+            "description": "内部数据版本；用于检测过期修改",
+            "minimum": 1
+          },
+          "provider": {
+            "type": "string",
+            "description": "服务商",
+            "enum": [
+              "openai",
+              "claude",
+              "deepseek"
+            ]
+          },
+          "api_key": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": "密钥仅写入钥匙串，null 表示删除；省略表示保留当前服务商密钥",
+                "maxLength": 512,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "expected_revision",
+          "provider"
+        ],
+        "additionalProperties": false,
+        "description": ""
+      },
+      "UsageReport": {
+        "type": "object",
+        "properties": {
+          "summary": {
+            "$ref": "#/components/schemas/UsageSummary"
+          },
+          "calls": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UsageCall"
+            }
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": ""
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "summary",
+          "calls",
+          "next_cursor"
+        ],
+        "additionalProperties": false,
+        "description": ""
+      },
+      "Health": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "description": "",
+            "enum": [
+              "ready",
+              "migrating"
+            ]
+          },
+          "api_version": {
+            "type": "string",
+            "description": ""
+          },
+          "max_quotes": {
+            "type": "integer",
+            "description": ""
+          },
+          "max_file_bytes": {
+            "type": "integer",
+            "description": ""
+          },
+          "max_pdf_pages": {
+            "type": "integer",
+            "description": ""
+          }
+        },
+        "required": [
+          "status",
+          "api_version",
+          "max_quotes",
+          "max_file_bytes",
+          "max_pdf_pages"
+        ],
+        "additionalProperties": false,
+        "description": ""
+      },
+      "FieldGroup": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "本地对象 ID",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "label": {
+            "type": "string",
+            "description": "label"
+          },
+          "signature": {
+            "$ref": "#/components/schemas/FieldSignature",
+            "description": "对齐维度"
+          },
+          "members": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FactRef"
+            },
+            "minItems": 1,
+            "description": "所属报价事实；每个事实只归一组"
+          },
+          "status": {
+            "type": "string",
+            "description": "状态枚举",
+            "enum": [
+              "suggested",
+              "confirmed",
+              "pending"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "description": "归并理由或查询失败原因"
+          },
+          "display_order": {
+            "type": "integer",
+            "description": "展示顺序",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "signature",
+          "members",
+          "status",
+          "reason",
+          "display_order"
+        ],
+        "additionalProperties": false,
+        "description": ""
+      },
+      "FieldSignature": {
+        "type": "object",
+        "properties": {
+          "semantic_kind": {
+            "type": "string",
+            "description": "语义类型 / 价格层级",
+            "enum": [
+              "project_total",
+              "line_total",
+              "unit_price",
+              "quantity",
+              "material",
+              "scope",
+              "term",
+              "tax",
+              "other"
+            ]
+          },
+          "entity_key": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": ""
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "施工工项标识"
+          },
+          "value_type": {
+            "type": "string",
+            "description": "值类型",
+            "enum": [
+              "text",
+              "decimal",
+              "boolean",
+              "date",
+              "duration"
+            ]
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": ""
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "计量单位"
+          },
+          "currency": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": "ISO 4217 币种代码",
+                "pattern": "^[A-Z]{3}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "币种"
+          },
+          "tax_basis": {
+            "type": "string",
+            "description": "税费口径",
+            "enum": [
+              "included",
+              "excluded",
+              "unknown",
+              "not_applicable"
+            ]
+          },
+          "coverage": {
+            "type": "string",
+            "description": "独立项或打包项",
+            "enum": [
+              "separate",
+              "bundled",
+              "unknown",
+              "not_applicable"
+            ]
+          }
+        },
+        "required": [
+          "semantic_kind",
+          "entity_key",
+          "value_type",
+          "unit",
+          "currency",
+          "tax_basis",
+          "coverage"
+        ],
+        "additionalProperties": false,
+        "description": ""
+      },
+      "FactRef": {
+        "type": "object",
+        "properties": {
+          "quote_id": {
+            "type": "string",
+            "description": "本地对象 ID",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "fact_id": {
+            "type": "string",
+            "description": "本地对象 ID",
+            "minLength": 1,
+            "maxLength": 80
+          }
+        },
+        "required": [
+          "quote_id",
+          "fact_id"
+        ],
+        "additionalProperties": false,
+        "description": ""
+      },
+      "SourceBlock": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "本地对象 ID",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "page": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "description": "",
+                "minimum": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "页码"
+          },
+          "text": {
+            "type": "string",
+            "description": "原文 / 问题文字"
+          },
+          "bbox": {
+            "anyOf": [
+              {
+                "type": "array",
+                "items": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "minItems": 4,
+                "maxItems": 4
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "左上角原点的归一化 [x,y,width,height]"
+          },
+          "ocr_confidence": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "OCR 置信度或 null"
+          }
+        },
+        "required": [
+          "id",
+          "page",
+          "text",
+          "bbox",
+          "ocr_confidence"
+        ],
+        "additionalProperties": false,
+        "description": ""
+      },
+      "Fact": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "本地对象 ID",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "raw_label": {
+            "type": "string",
+            "description": "原报价字段名称"
+          },
+          "raw_value": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": ""
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "原报价文字值，不可被核对操作改写"
+          },
+          "normalized_value": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": ""
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "核对后的规范值；null 为未知"
+          },
+          "value_type": {
+            "type": "string",
+            "description": "值类型",
+            "enum": [
+              "text",
+              "decimal",
+              "boolean",
+              "date",
+              "duration"
+            ]
+          },
+          "semantic_kind": {
+            "type": "string",
+            "description": "语义类型 / 价格层级",
+            "enum": [
+              "project_total",
+              "line_total",
+              "unit_price",
+              "quantity",
+              "material",
+              "scope",
+              "term",
+              "tax",
+              "other"
+            ]
+          },
+          "entity_key": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": "工程项目语义标识；相同字段在不同工项中不能合并"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "施工工项标识"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": ""
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "计量单位"
+          },
+          "currency": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": "ISO 4217 币种代码",
+                "pattern": "^[A-Z]{3}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "币种"
+          },
+          "tax_basis": {
+            "type": "string",
+            "description": "税费口径",
+            "enum": [
+              "included",
+              "excluded",
+              "unknown",
+              "not_applicable"
+            ]
+          },
+          "coverage": {
+            "type": "string",
+            "description": "独立项或打包项",
+            "enum": [
+              "separate",
+              "bundled",
+              "unknown",
+              "not_applicable"
+            ]
+          },
+          "source_refs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SourceRef"
+            },
+            "description": "原文依据集合"
+          },
+          "origin": {
+            "type": "string",
+            "description": "来自提取或人工新增",
+            "enum": [
+              "extracted",
+              "manual"
+            ]
+          },
+          "review_status": {
+            "type": "string",
+            "description": "字段核对状态",
+            "enum": [
+              "unreviewed",
+              "confirmed",
+              "pending"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "raw_label",
+          "raw_value",
+          "normalized_value",
+          "value_type",
+          "semantic_kind",
+          "entity_key",
+          "unit",
+          "currency",
+          "tax_basis",
+          "coverage",
+          "source_refs",
+          "origin",
+          "review_status"
+        ],
+        "additionalProperties": false,
+        "description": ""
+      },
+      "SourceRef": {
+        "type": "object",
+        "properties": {
+          "quote_id": {
+            "type": "string",
+            "description": "本地对象 ID",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "block_id": {
+            "type": "string",
+            "description": "本地对象 ID",
+            "minLength": 1,
+            "maxLength": 80
+          }
+        },
+        "required": [
+          "quote_id",
+          "block_id"
+        ],
+        "additionalProperties": false,
+        "description": ""
+      },
+      "Comparison": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "本地对象 ID",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "project_id": {
+            "type": "string",
+            "description": "本地对象 ID",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "source_revision": {
+            "type": "integer",
+            "description": "乐观锁版本号，从 1 开始",
+            "minimum": 1
+          },
+          "is_stale": {
+            "type": "boolean",
+            "description": "源项目已变化时为 true"
+          },
+          "created_at": {
+            "type": "string",
+            "description": "UTC 时间，界面转换为用户当地时间",
+            "format": "date-time"
+          },
+          "columns": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ComparisonColumn"
+            },
+            "minItems": 2,
+            "maxItems": 5,
+            "description": "承包商列"
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ComparisonRow"
+            },
+            "description": "统一字段行"
+          },
+          "pending_count": {
+            "type": "integer",
+            "description": "待确认项数量"
+          },
+          "can_compare_final_total": {
+            "type": "boolean",
+            "description": "最终总成本口径是否可比"
+          },
+          "summary": {
+            "type": "string",
+            "description": "比较摘要"
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "source_revision",
+          "is_stale",
+          "created_at",
+          "columns",
+          "rows",
+          "pending_count",
+          "can_compare_final_total",
+          "summary"
+        ],
+        "additionalProperties": false,
+        "description": ""
+      },
+      "ComparisonColumn": {
+        "type": "object",
+        "properties": {
+          "quote_id": {
+            "type": "string",
+            "description": "本地对象 ID",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "contractor_name": {
+            "type": "string",
+            "description": "承包商名称"
+          },
+          "currency": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": "ISO 4217 币种代码",
+                "pattern": "^[A-Z]{3}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "币种"
+          }
+        },
+        "required": [
+          "quote_id",
+          "contractor_name",
+          "currency"
+        ],
+        "additionalProperties": false,
+        "description": ""
+      },
+      "ComparisonRow": {
+        "type": "object",
+        "properties": {
+          "field_id": {
+            "type": "string",
+            "description": "本地对象 ID",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "label": {
+            "type": "string",
+            "description": "label"
+          },
+          "signature": {
+            "$ref": "#/components/schemas/FieldSignature",
+            "description": "对齐维度"
+          },
+          "cells": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ComparisonCell"
+            },
+            "minItems": 2,
+            "maxItems": 5,
+            "description": "每家报价的单元格"
+          },
+          "has_difference": {
+            "type": "boolean",
+            "description": "是否存在差异"
+          }
+        },
+        "required": [
+          "field_id",
+          "label",
+          "signature",
+          "cells",
+          "has_difference"
+        ],
+        "additionalProperties": false,
+        "description": ""
+      },
+      "ComparisonCell": {
+        "type": "object",
+        "properties": {
+          "quote_id": {
+            "type": "string",
+            "description": "本地对象 ID",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "state": {
+            "type": "string",
+            "description": "状态枚举",
+            "enum": [
+              "provided",
+              "missing",
+              "pending",
+              "not_comparable",
+              "bundled"
+            ]
+          },
+          "display_value": {
+            "type": "string",
+            "description": "界面显示文字"
+          },
+          "normalized_value": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": ""
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "核对后的规范值；null 为未知"
+          },
+          "fact_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "description": "本地对象 ID",
+              "minLength": 1,
+              "maxLength": 80
+            },
+            "description": "单元格关联的事实 ID"
+          },
+          "source_refs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SourceRef"
+            },
+            "description": "原文依据集合"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": ""
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "提示说明"
+          }
+        },
+        "required": [
+          "quote_id",
+          "state",
+          "display_value",
+          "normalized_value",
+          "fact_ids",
+          "source_refs",
+          "note"
+        ],
+        "additionalProperties": false,
+        "description": ""
+      },
+      "Flag": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "本地对象 ID",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "quote_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": "本地对象 ID",
+                "minLength": 1,
+                "maxLength": 80
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "报价 ID"
+          },
+          "field_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": "本地对象 ID",
+                "minLength": 1,
+                "maxLength": 80
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "统一字段 ID"
+          },
+          "category": {
+            "type": "string",
+            "description": "提示分类",
+            "enum": [
+              "missing",
+              "unclear",
+              "scope_difference",
+              "tax",
+              "currency",
+              "arithmetic",
+              "mapping"
+            ]
+          },
+          "severity": {
+            "type": "string",
+            "description": "提示等级",
+            "enum": [
+              "info",
+              "attention"
+            ]
+          },
+          "message": {
+            "type": "string",
+            "description": "可展示说明"
+          },
+          "source_refs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SourceRef"
+            },
+            "description": "原文依据集合"
+          }
+        },
+        "required": [
+          "id",
+          "quote_id",
+          "field_id",
+          "category",
+          "severity",
+          "message",
+          "source_refs"
+        ],
+        "additionalProperties": false,
+        "description": ""
+      },
+      "Question": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "本地对象 ID",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "quote_id": {
+            "type": "string",
+            "description": "本地对象 ID",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "text": {
+            "type": "string",
+            "description": "原文 / 问题文字"
+          },
+          "flag_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "description": "本地对象 ID",
+              "minLength": 1,
+              "maxLength": 80
+            },
+            "description": "追问对应提示 ID"
+          },
+          "selected_by_default": {
+            "type": "boolean",
+            "description": "是否默认勾选"
+          }
+        },
+        "required": [
+          "id",
+          "quote_id",
+          "text",
+          "flag_ids",
+          "selected_by_default"
+        ],
+        "additionalProperties": false,
+        "description": ""
+      },
+      "Error": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "稳定错误码"
+          },
+          "message": {
+            "type": "string",
+            "description": "可展示的中文说明"
+          },
+          "request_id": {
+            "type": "string",
+            "description": "本地对象 ID",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "retryable": {
+            "type": "boolean",
+            "description": "能否手动重试"
+          },
+          "field_errors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FieldError"
+            },
+            "description": "字段级错误集合"
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "request_id",
+          "retryable",
+          "field_errors"
+        ],
+        "additionalProperties": false,
+        "description": ""
+      },
+      "FieldError": {
+        "type": "object",
+        "properties": {
+          "field": {
+            "type": "string",
+            "description": "错误字段"
+          },
+          "reason": {
+            "type": "string",
+            "description": "归并理由或查询失败原因"
+          }
+        },
+        "required": [
+          "field",
+          "reason"
+        ],
+        "additionalProperties": false,
+        "description": ""
+      },
+      "Pricing": {
+        "type": "object",
+        "properties": {
+          "provider": {
+            "type": "string",
+            "description": "模型服务商枚举",
+            "enum": [
+              "openai",
+              "claude",
+              "deepseek"
+            ]
+          },
+          "model_id": {
+            "type": "string",
+            "description": "系统预设模型 ID"
+          },
+          "status": {
+            "type": "string",
+            "description": "状态枚举",
+            "enum": [
+              "known",
+              "unknown",
+              "stale"
+            ]
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": ""
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "当前数据 / 价格清单版本"
+          },
+          "checked_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": "UTC 时间，界面转换为用户当地时间",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "查询 / 校验时间"
+          },
+          "tiers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PriceTier"
+            },
+            "description": "价格条件分档"
+          },
+          "official_url": {
+            "type": "string",
+            "description": "官方价格页面",
+            "format": "uri"
+          }
+        },
+        "required": [
+          "provider",
+          "model_id",
+          "status",
+          "version",
+          "checked_at",
+          "tiers",
+          "official_url"
+        ],
+        "additionalProperties": false,
+        "description": ""
+      },
+      "PriceTier": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "名称"
+          },
+          "currency": {
+            "type": "string",
+            "description": "ISO 4217 币种代码",
+            "pattern": "^[A-Z]{3}$"
+          },
+          "input_per_million": {
+            "type": "string",
+            "description": "十进制字符串；禁止用浮点数结算",
+            "pattern": "^-?\\d+(\\.\\d+)?$"
+          },
+          "cached_input_per_million": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": "十进制字符串；禁止用浮点数结算",
+                "pattern": "^-?\\d+(\\.\\d+)?$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "每百万缓存输入 Token 价格"
+          },
+          "output_per_million": {
+            "type": "string",
+            "description": "十进制字符串；禁止用浮点数结算",
+            "pattern": "^-?\\d+(\\.\\d+)?$"
+          },
+          "conditions": {
+            "type": "string",
+            "description": "价格适用条件"
+          }
+        },
+        "required": [
+          "name",
+          "currency",
+          "input_per_million",
+          "cached_input_per_million",
+          "output_per_million",
+          "conditions"
+        ],
+        "additionalProperties": false,
+        "description": ""
+      },
+      "UsageSummary": {
+        "type": "object",
+        "properties": {
+          "provider": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": "模型服务商枚举",
+                "enum": [
+                  "openai",
+                  "claude",
+                  "deepseek"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "服务商枚举"
+          },
+          "connection_generation": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "description": "乐观锁版本号，从 1 开始",
+                "minimum": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "连接代际；更换密钥即变更"
+          },
+          "from": {
+            "type": "string",
+            "description": "UTC 时间，界面转换为用户当地时间",
+            "format": "date-time"
+          },
+          "to": {
+            "type": "string",
+            "description": "UTC 时间，界面转换为用户当地时间",
+            "format": "date-time"
+          },
+          "scope": {
+            "type": "string",
+            "description": "用量统计范围，仅本应用",
+            "enum": [
+              "app_local"
+            ]
+          },
+          "call_count": {
+            "type": "integer",
+            "description": "调用次数，含重试",
+            "minimum": 0
+          },
+          "input_tokens_known": {
+            "type": "integer",
+            "description": "已知输入 Token 之和",
+            "minimum": 0
+          },
+          "output_tokens_known": {
+            "type": "integer",
+            "description": "已知输出 Token 之和",
+            "minimum": 0
+          },
+          "unknown_usage_calls": {
+            "type": "integer",
+            "description": "没有真实 usage 的调用数",
+            "minimum": 0
+          },
+          "costs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CostTotal"
+            },
+            "description": "按币种分开的费用"
+          }
+        },
+        "required": [
+          "provider",
+          "connection_generation",
+          "from",
+          "to",
+          "scope",
+          "call_count",
+          "input_tokens_known",
+          "output_tokens_known",
+          "unknown_usage_calls",
+          "costs"
+        ],
+        "additionalProperties": false,
+        "description": ""
+      },
+      "CostTotal": {
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "description": "ISO 4217 币种代码",
+            "pattern": "^[A-Z]{3}$"
+          },
+          "known_estimated_amount": {
+            "type": "string",
+            "description": "十进制字符串；禁止用浮点数结算",
+            "pattern": "^-?\\d+(\\.\\d+)?$"
+          },
+          "unknown_call_count": {
+            "type": "integer",
+            "description": "无法估算费用的调用数",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "currency",
+          "known_estimated_amount",
+          "unknown_call_count"
+        ],
+        "additionalProperties": false,
+        "description": ""
+      },
+      "UsageCall": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "本地对象 ID",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "job_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": "本地对象编号",
+                "minLength": 1,
+                "maxLength": 80
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": "本地对象 ID",
+                "minLength": 1,
+                "maxLength": 80
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "项目 ID"
+          },
+          "provider": {
+            "type": "string",
+            "description": "模型服务商枚举",
+            "enum": [
+              "openai",
+              "claude",
+              "deepseek"
+            ]
+          },
+          "model_id": {
+            "type": "string",
+            "description": "系统预设模型 ID"
+          },
+          "connection_generation": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "description": "乐观锁版本号，从 1 开始",
+                "minimum": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "连接代际；更换密钥即变更"
+          },
+          "credential_scope": {
+            "type": "string",
+            "description": "保存密钥或临时测试密钥",
+            "enum": [
+              "saved",
+              "ephemeral"
+            ]
+          },
+          "purpose": {
+            "type": "string",
+            "description": "模型调用用途",
+            "enum": [
+              "extraction",
+              "alignment",
+              "draft",
+              "connection_test"
+            ]
+          },
+          "outcome": {
+            "type": "string",
+            "description": "调用结果",
+            "enum": [
+              "succeeded",
+              "failed",
+              "cancelled",
+              "unknown"
+            ]
+          },
+          "input_tokens": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "description": "",
+                "minimum": 0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "输入 Token"
+          },
+          "output_tokens": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "description": "",
+                "minimum": 0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "输出 Token"
+          },
+          "cached_input_tokens": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "description": "",
+                "minimum": 0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "缓存命中 Token"
+          },
+          "usage_known": {
+            "type": "boolean",
+            "description": "是否拿到真实 Token 信息"
+          },
+          "estimated_cost": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Money"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "可计算的预计费用，null 为无法估算"
+          },
+          "pricing_version": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": ""
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "计价依据版本"
+          },
+          "created_at": {
+            "type": "string",
+            "description": "UTC 时间，界面转换为用户当地时间",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "job_id",
+          "project_id",
+          "provider",
+          "model_id",
+          "connection_generation",
+          "credential_scope",
+          "purpose",
+          "outcome",
+          "input_tokens",
+          "output_tokens",
+          "cached_input_tokens",
+          "usage_known",
+          "estimated_cost",
+          "pricing_version",
+          "created_at"
+        ],
+        "additionalProperties": false,
+        "description": ""
+      },
+      "Money": {
+        "type": "object",
+        "properties": {
+          "amount": {
+            "type": "string",
+            "description": "十进制字符串；禁止用浮点数结算",
+            "pattern": "^-?\\d+(\\.\\d+)?$"
+          },
+          "currency": {
+            "type": "string",
+            "description": "ISO 4217 币种代码",
+            "pattern": "^[A-Z]{3}$"
+          }
+        },
+        "required": [
+          "amount",
+          "currency"
+        ],
+        "additionalProperties": false,
+        "description": ""
+      },
+      "Balance": {
+        "type": "object",
+        "properties": {
+          "provider": {
+            "type": "string",
+            "description": "模型服务商枚举",
+            "enum": [
+              "openai",
+              "claude",
+              "deepseek"
+            ]
+          },
+          "connection_generation": {
+            "type": "integer",
+            "description": "乐观锁版本号，从 1 开始",
+            "minimum": 1
+          },
+          "status": {
+            "type": "string",
+            "description": "状态枚举",
+            "enum": [
+              "available",
+              "unsupported",
+              "not_configured",
+              "unavailable",
+              "stale"
+            ]
+          },
+          "balances": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BalanceItem"
+            },
+            "description": "官方余额按币种列表"
+          },
+          "checked_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": "UTC 时间，界面转换为用户当地时间",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "查询 / 校验时间"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": ""
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "归并理由或查询失败原因"
+          },
+          "billing_url": {
+            "type": "string",
+            "description": "官方账单入口",
+            "format": "uri"
+          }
+        },
+        "required": [
+          "provider",
+          "connection_generation",
+          "status",
+          "balances",
+          "checked_at",
+          "reason",
+          "billing_url"
+        ],
+        "additionalProperties": false,
+        "description": ""
+      },
+      "BalanceItem": {
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "description": "ISO 4217 币种代码",
+            "pattern": "^[A-Z]{3}$"
+          },
+          "total": {
+            "type": "string",
+            "description": "十进制字符串；禁止用浮点数结算",
+            "pattern": "^-?\\d+(\\.\\d+)?$"
+          },
+          "granted": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": "十进制字符串；禁止用浮点数结算",
+                "pattern": "^-?\\d+(\\.\\d+)?$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "赠送余额"
+          },
+          "topped_up": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": "十进制字符串；禁止用浮点数结算",
+                "pattern": "^-?\\d+(\\.\\d+)?$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "充值余额"
+          }
+        },
+        "required": [
+          "currency",
+          "total",
+          "granted",
+          "topped_up"
+        ],
+        "additionalProperties": false,
+        "description": ""
+      }
+    },
+    "securitySchemes": {
+      "LocalSession": {
+        "type": "http",
+        "scheme": "bearer"
+      }
+    }
+  }
+}

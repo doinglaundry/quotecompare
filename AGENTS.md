@@ -3,8 +3,9 @@
 本仓库是 QuoteCompare 产品资料和后续代码的统一位置。
 
 - PRD：`docs/prd/`；完整界面图：`docs/product-screens/`。
-- 技术方案保持 HTML 格式：`docs/technical/QuoteCompare-technical-design-v1.html`。
-- 接口契约：`docs/technical/QuoteCompare-openapi-v1.json`。
+- 技术方案保持 HTML 格式：`docs/technical/QuoteCompare-technical-design-v2.html`。
+- 建库脚本：`docs/technical/database-schema-v2.sql`（六张表）；v1 保留为历史参考，新旧接口不混用。
+- 接口契约：`docs/technical/QuoteCompare-openapi-v2.json`。
 - 后续前端代码放 `frontend/`，后端代码放 `backend/`。
 - 前端使用 JavaScript；后端使用 Python。App 必须打包运行环境，用户无需安装 Python。
 - 保留左侧 App 模块入口；报价模块内部使用四个顶部标签。
