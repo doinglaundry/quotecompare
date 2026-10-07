@@ -37,6 +37,7 @@ jobs:
           npm run test:e2e
           npm run test:coverage
           npm run test:recovery
+          npm run test:reads
       - name: Bundle Python
         run: npm run build:backend
       - name: Unsigned development build

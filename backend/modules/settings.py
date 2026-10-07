@@ -72,7 +72,12 @@ class SettingsStore:
             if busy:
                 raise ApiError(409, '请等待或取消模型任务后再修改设置', 'SETTINGS_BUSY')
             provider = body['provider']
-            key = body.get('api_key') if 'api_key' in body else self.read_api_key(old) if old['provider'] == provider else None
+            if 'api_key' in body:
+                key = body['api_key']
+            elif old['provider'] == provider:
+                key = self.read_api_key(old)
+            else:
+                key = None
             if isinstance(key, str):
                 key = key.strip()
                 if not key:

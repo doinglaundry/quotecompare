@@ -270,9 +270,14 @@ def get_comparison(comparison_id: str, request: Request):
 @router.get('/projects/{project_id}/comparisons')
 def list_comparisons(project_id: str, request: Request, cursor: str | None = None, limit: int = 20):
     state = request.app.state.context
-    state.db.get('projects', project_id)
-    if not 1 <= limit <= 100:
-        raise ApiError(400, '每页数量应为 1–100')
-    rows = state.db.rows('SELECT id FROM comparisons WHERE project_id=? AND id>? ORDER BY id LIMIT ?', (project_id, cursor or '', limit + 1))
-    return {'items': [get_comparison(row['id'], request)['comparison'] for row in rows[:limit]],
-            'next_cursor': rows[limit - 1]['id'] if len(rows) > limit else None}
+    with state.db.lock:
+        project = state.db.get('projects', project_id)
+        if not 1 <= limit <= 100:
+            raise ApiError(400, '每页数量应为 1–100')
+        rows = state.db.rows('SELECT id,source_revision,snapshot_json FROM comparisons WHERE project_id=? AND id>? ORDER BY id LIMIT ?', (project_id, cursor or '', limit + 1))
+    items = []
+    for row in rows[:limit]:
+        comparison = json.loads(row['snapshot_json'])['comparison']
+        comparison['is_stale'] = project['revision'] != row['source_revision']
+        items.append(comparison)
+    return {'items': items, 'next_cursor': rows[limit - 1]['id'] if len(rows) > limit else None}

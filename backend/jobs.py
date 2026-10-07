@@ -179,10 +179,10 @@ async def create_job(request: Request):
                         raise ApiError(409, '重新提取会替换人工核对数据，请明确确认', 'REVIEWED_DATA_EXISTS')
                 elif len(quotes) < 2 or any(not json.loads(quote['reviewed_facts_json']) for quote in quotes):
                     raise ApiError(422, '请先提取至少两份报价', 'NOT_READY')
+            elif body['kind'] == 'draft':
+                reports.draft_input(state, body)
             else:
                 reports.load_snapshot(state, body['comparison_id'], body['project_id'])
-                if body['kind'] == 'draft':
-                    reports.draft_input(state, body)
         if body['kind'] != 'report' and not state.settings.read_api_key(config):
             raise ApiError(422, '请先在设置中填写 API Key', 'KEY_REQUIRED')
         stored = dict(body)

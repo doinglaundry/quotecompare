@@ -1,4 +1,3 @@
-import copy
 import csv
 import html
 import io
@@ -61,7 +60,6 @@ def draft_input(state, body):
 
 
 def report_sections(data, options):
-    data = copy.deepcopy(data)
     property_name = data['project']['property']
     if options.get('hide_property') and property_name:
         # Redact every report string, including original-text appendix and AI-generated questions.

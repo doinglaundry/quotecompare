@@ -13,7 +13,8 @@
     "build:backend": "sh scripts/build_backend.sh",
     "test:packaged": "node tests/e2e/packaged.cjs",
     "test:coverage": "node tests/e2e/coverage.cjs",
-    "test:recovery": "node tests/e2e/recovery.cjs"
+    "test:recovery": "node tests/e2e/recovery.cjs",
+    "test:reads": "node tests/e2e/reads.cjs"
   },
   "dependencies": {
     "react": "^19.2.0",
