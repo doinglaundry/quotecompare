@@ -43,7 +43,7 @@ class SettingsStore:
             return json.loads(self.path.read_text())
         return {'provider': 'openai', 'revision': 1, 'key_hint': None, 'account': None}
 
-    def key(self, config=None):
+    def read_api_key(self, config=None):
         config = config or self.read()
         return self.state.secrets.get(config['account']) if config['account'] else None
 
@@ -61,7 +61,7 @@ class SettingsStore:
     def view(self):
         config = self.read()
         return {key: config[key] for key in ('provider', 'revision', 'key_hint')} | {
-            'has_key': bool(self.key(config)), 'model_id': PRESETS[config['provider']]['model'], 'pricing': self.pricing(config['provider'])}
+            'has_key': bool(self.read_api_key(config)), 'model_id': PRESETS[config['provider']]['model'], 'pricing': self.pricing(config['provider'])}
 
     def save(self, body):
         with self.lock, self.state.db.transaction():
@@ -72,7 +72,7 @@ class SettingsStore:
             if busy:
                 raise ApiError(409, '请等待或取消模型任务后再修改设置', 'SETTINGS_BUSY')
             provider = body['provider']
-            key = body.get('api_key') if 'api_key' in body else self.key(old) if old['provider'] == provider else None
+            key = body.get('api_key') if 'api_key' in body else self.read_api_key(old) if old['provider'] == provider else None
             if isinstance(key, str):
                 key = key.strip()
                 if not key:
@@ -92,7 +92,7 @@ class SettingsStore:
             self.balance_cache = None
             return self.view()
 
-    def record(self, job, usage, raw, outcome, call_id=None):
+    def record_usage(self, job, usage, raw, outcome, call_id=None):
         input_tokens, output_tokens, cached = usage
         known = all(type(value) is int and value >= 0 for value in (input_tokens, output_tokens))
         cached = cached if type(cached) is int and cached >= 0 and known and cached <= input_tokens else None
@@ -173,7 +173,7 @@ def get_balance(request: Request, refresh: bool = False):
         provider = config['provider']
         result = {'provider': provider, 'connection_generation': config['revision'], 'status': 'unsupported', 'balances': [], 'checked_at': None,
                   'reason': '首版仅查询 DeepSeek 余额；请打开官方账单', 'billing_url': PRESETS[provider]['billing_url']}
-        key = state.settings.key(config)
+        key = state.settings.read_api_key(config)
         if not key:
             return {**result, 'status': 'not_configured', 'reason': '尚未配置 API Key'}
         if provider != 'deepseek':

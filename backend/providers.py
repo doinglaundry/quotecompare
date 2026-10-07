@@ -17,9 +17,6 @@ class Providers:
         self.client = httpx.Client(timeout=90, transport=transport)
         self.urls = urls or {name: value['url'] for name, value in PRESETS.items()}
 
-    def close(self):
-        self.client.close()
-
     def request(self, provider, key, method, path, body=None):
         headers = {'x-api-key': key, 'anthropic-version': '2023-06-01'} if provider == 'claude' else {'Authorization': 'Bearer ' + key}
         try:

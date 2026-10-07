@@ -24,35 +24,29 @@ class Jobs:
             state.db.connection.execute("UPDATE jobs SET state='interrupted',stage='应用退出时中断；需手动重试',updated_at=? WHERE state IN ('queued','running','cancel_requested')", (now(),))
             state.db.connection.execute("UPDATE quotes SET status=CASE WHEN reviewed_facts_json='[]' THEN 'imported' ELSE 'review_required' END WHERE status='extracting'")
 
-    def close(self):
-        self.pool.shutdown(wait=True, cancel_futures=True)
-
-    def update(self, job_id, **fields):
+    def update_job(self, job_id, **fields):
         with self.state.db.transaction():
             self.state.db.update('jobs', job_id, {**fields, 'updated_at': now()})
 
-    def cancelled(self, job_id):
-        return self.state.db.get('jobs', job_id)['state'] == 'cancel_requested'
-
-    def require_active(self, job_id):
-        if self.cancelled(job_id):
+    def raise_if_cancelled(self, job_id):
+        if self.state.db.get('jobs', job_id)['state'] == 'cancel_requested':
             raise ApiError(409, '任务已取消；已发生的调用仍可能计费', 'CANCELLED')
 
-    def generate(self, job, payload, schema):
-        self.require_active(job['id'])
+    def generate_json(self, job, payload, schema):
+        self.raise_if_cancelled(job['id'])
         config = self.state.settings.read()
         if config['revision'] != job['connection_generation']:
             raise ApiError(409, '模型设置已变化', 'STALE_REVISION')
-        key = self.state.settings.key(config)
-        if not key:
+        api_key = self.state.settings.read_api_key(config)
+        if not api_key:
             raise ApiError(422, '请先在设置中填写 API Key', 'KEY_REQUIRED')
         # Persist a pending billable call before the network request; a crash leaves an honest unknown record.
-        call_id = self.state.settings.record(job, (None, None, None), {}, 'unknown')
-        usage, raw, outcome = (None, None, None), {}, 'unknown'
+        call_id = self.state.settings.record_usage(job, (None, None, None), {}, 'unknown')
+        token_usage, raw_usage, outcome = (None, None, None), {}, 'unknown'
         try:
-            text, usage, raw = self.state.providers.generate(job['provider'], key, payload, schema)
+            text, token_usage, raw_usage = self.state.providers.generate(job['provider'], api_key, payload, schema)
             outcome = 'failed'
-            self.require_active(job['id'])
+            self.raise_if_cancelled(job['id'])
             result = parse_result(text, schema)
             outcome = 'succeeded'
             return result
@@ -63,16 +57,16 @@ class Jobs:
                 outcome = 'failed'
             raise
         finally:
-            self.state.settings.record(job, usage, raw, outcome, call_id)
+            self.state.settings.record_usage(job, token_usage, raw_usage, outcome, call_id)
 
     def run(self, job_id):
         job = self.state.db.get('jobs', job_id)
         body = json.loads(job['input_json'])
         try:
-            self.require_active(job_id)
-            self.update(job_id, state='running', stage='处理中')
+            self.raise_if_cancelled(job_id)
+            self.update_job(job_id, state='running', stage='处理中')
             if job['kind'] == 'extraction':
-                self.extract(job, body)
+                self.extract_quotes(job, body)
                 return
             if job['kind'] == 'alignment':
                 project = body['frozen_project']
@@ -81,59 +75,59 @@ class Jobs:
                            'quotes': [{'quote_id': quote['id'], 'facts': json.loads(quote['reviewed_facts_json'])} for quote in quotes]}
                 if self.state.db.get('projects', project['id'])['revision'] != body['expected_revision']:
                     raise ApiError(409, '项目已修改，请重新汇总字段', 'STALE_REVISION')
-                result = self.generate(job, payload, analysis.ALIGNMENT_SCHEMA)
+                result = self.generate_json(job, payload, analysis.ALIGNMENT_SCHEMA)
                 for group in result['groups']:
                     group['status'] = 'suggested'
                 analysis.check_groups(quotes, result['groups'])
                 with self.state.db.transaction():
-                    self.require_active(job_id)
-                    revision = self.state.db.bump(project['id'], body['expected_revision'], invalidate=False)
+                    self.raise_if_cancelled(job_id)
+                    revision = self.state.db.advance_revision(project['id'], body['expected_revision'], invalidate=False)
                     self.state.db.update('projects', project['id'], {'field_groups_json': dump(result['groups']), 'mappings_revision': revision})
                 result = {'mappings_revision': revision}
             elif job['kind'] == 'draft':
                 payload = reports.draft_input(self.state, body)
-                draft = self.generate(job, payload, reports.DRAFT_SCHEMA)
+                draft = self.generate_json(job, payload, reports.DRAFT_SCHEMA)
                 draft_id = uid()
                 with self.state.db.transaction():
-                    self.require_active(job_id)
+                    self.raise_if_cancelled(job_id)
                     self.state.db.insert('drafts', {'id': draft_id, 'project_id': job['project_id'], 'comparison_id': body['comparison_id'],
                         'quote_id': body['quote_id'], 'language': body['language'], 'question_ids_json': dump(body['question_ids']), **draft, 'updated_at': now()})
                 result = {'draft_ids': [draft_id]}
             elif job['kind'] == 'report':
                 result = reports.render_report(self.state, body, job_id)
-                self.require_active(job_id)
+                self.raise_if_cancelled(job_id)
             else:
-                self.generate(job, {'purpose': 'connection_test', 'instruction': '返回 {"ok":true}'},
+                self.generate_json(job, {'purpose': 'connection_test', 'instruction': '返回 {"ok":true}'},
                     {'type': 'object', 'properties': {'ok': {'const': True}}, 'required': ['ok'], 'additionalProperties': False})
                 result = {'test_succeeded': True, 'message': '连接成功；测试会产生少量用量'}
             with self.state.db.transaction():
-                self.require_active(job_id)
+                self.raise_if_cancelled(job_id)
                 self.state.db.update('jobs', job_id, {'state': 'succeeded', 'stage': '完成', 'completed_units': job['total_units'], 'result_json': dump(result), 'updated_at': now()})
         except Exception as error:
             error = error if isinstance(error, ApiError) else ApiError(500, '任务处理失败；请检查文件和输入后重试', 'JOB_FAILED')
-            cancelled = self.cancelled(job_id)
-            self.update(job_id, state='cancelled' if cancelled else 'failed', stage='已取消' if cancelled else '失败', error_json=dump(error_payload(error)))
+            cancelled = self.state.db.get('jobs', job_id)['state'] == 'cancel_requested'
+            self.update_job(job_id, state='cancelled' if cancelled else 'failed', stage='已取消' if cancelled else '失败', error_json=dump(error_payload(error)))
             if job['kind'] == 'report':
                 self.state.files.remove_folder(job['project_id'], f'snapshots/{body["comparison_id"]}/reports/{job_id}')
 
-    def extract(self, job, body):
+    def extract_quotes(self, job, body):
         revision = body['expected_revision']
         succeeded, failures = [], []
         for index, quote_id in enumerate(body['quote_ids']):
-            self.require_active(job['id'])
+            self.raise_if_cancelled(job['id'])
             quote = next(quote for quote in body['frozen_quotes'] if quote['id'] == quote_id)
             project = body['frozen_project']
-            self.update(job['id'], stage=f'提取第 {index + 1}/{len(body["quote_ids"])} 份报价')
+            self.update_job(job['id'], stage=f'提取第 {index + 1}/{len(body["quote_ids"])} 份报价')
             try:
                 with self.state.db.transaction():
                     if self.state.db.get('projects', project['id'])['revision'] != revision:
                         raise ApiError(409, '项目已修改，旧提取结果不能写入', 'STALE_REVISION')
                     self.state.db.update('quotes', quote_id, {'status': 'extracting'})
-                result = self.generate(job, analysis.extraction_input(project, quote), analysis.EXTRACTION_SCHEMA)
+                result = self.generate_json(job, analysis.extraction_input(project, quote), analysis.EXTRACTION_SCHEMA)
                 analysis.validate_extraction(quote, result)
                 with self.state.db.transaction():
-                    self.require_active(job['id'])
-                    revision = self.state.db.bump(project['id'], revision)
+                    self.raise_if_cancelled(job['id'])
+                    revision = self.state.db.advance_revision(project['id'], revision)
                     self.state.db.update('quotes', quote_id, {'extraction_json': dump({**result, 'model_id': job['model_id'], 'prompt_version': '1'}),
                         'reviewed_facts_json': dump(result['facts']), 'warnings_json': dump(result['warnings']), 'contractor_name': quote['contractor_name'] or result['contractor_name'],
                         'status': 'review_required', 'updated_at': now()})
@@ -147,9 +141,9 @@ class Jobs:
                 if error.code in ('CANCELLED', 'STALE_REVISION'):
                     raise
                 failures.append(f'{quote["contractor_name"] or quote_id}：{error.message}')
-            self.update(job['id'], completed_units=index + 1, result_json=dump({'quote_ids': succeeded}))
+            self.update_job(job['id'], completed_units=index + 1, result_json=dump({'quote_ids': succeeded}))
         with self.state.db.transaction():
-            self.require_active(job['id'])
+            self.raise_if_cancelled(job['id'])
             self.state.db.update('jobs', job['id'], {'state': ('partial_failed' if succeeded else 'failed') if failures else 'succeeded',
                 'stage': '部分失败' if failures else '完成', 'result_json': dump({'quote_ids': succeeded, 'message': '\n'.join(failures)}), 'updated_at': now(),
                 'error_json': dump(error_payload(ApiError(502, '\n'.join(failures), 'EXTRACTION_FAILED'))) if failures else None})
@@ -186,10 +180,10 @@ async def create_job(request: Request):
                 elif len(quotes) < 2 or any(not json.loads(quote['reviewed_facts_json']) for quote in quotes):
                     raise ApiError(422, '请先提取至少两份报价', 'NOT_READY')
             else:
-                reports.snapshot(state, body['comparison_id'], body['project_id'])
+                reports.load_snapshot(state, body['comparison_id'], body['project_id'])
                 if body['kind'] == 'draft':
                     reports.draft_input(state, body)
-        if body['kind'] != 'report' and not state.settings.key(config):
+        if body['kind'] != 'report' and not state.settings.read_api_key(config):
             raise ApiError(422, '请先在设置中填写 API Key', 'KEY_REQUIRED')
         stored = dict(body)
         if body['kind'] in ('extraction', 'alignment'):

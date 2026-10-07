@@ -11,7 +11,9 @@
     "test:e2e": "node tests/e2e/desktop.cjs",
     "package": "npm run build:backend && npm run build && electron-builder --mac --dir --config.electronDist=node_modules/electron/dist --config.mac.identity=null",
     "build:backend": "sh scripts/build_backend.sh",
-    "test:packaged": "node tests/e2e/packaged.cjs"
+    "test:packaged": "node tests/e2e/packaged.cjs",
+    "test:coverage": "node tests/e2e/coverage.cjs",
+    "test:recovery": "node tests/e2e/recovery.cjs"
   },
   "dependencies": {
     "react": "^19.2.0",

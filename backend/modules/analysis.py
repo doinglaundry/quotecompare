@@ -11,12 +11,12 @@ router = APIRouter()
 SIGNATURE = ('semantic_kind', 'entity_key', 'value_type', 'unit', 'currency', 'tax_basis', 'coverage')
 
 
-def canonical(value):
+def normalize_text(value):
     return re.sub(r'\s+', '', value.casefold()) if isinstance(value, str) else value
 
 
-def signature(fact):
-    return tuple(canonical(fact.get(key)) for key in SIGNATURE)
+def field_signature(fact):
+    return tuple(normalize_text(fact.get(key)) for key in SIGNATURE)
 
 
 def check_facts(quote, facts):
@@ -61,7 +61,7 @@ def check_groups(quotes, groups):
             fact = facts.get(key)
             if fact is None or key in covered:
                 raise ApiError(422, '字段引用不存在或被重复归并', 'INVALID_MAPPING')
-            if signature(fact) != signature(group['signature']):
+            if field_signature(fact) != field_signature(group['signature']):
                 raise ApiError(422, '单价、工项、单位、税或币种口径不一致，不能归并', 'INCOMPATIBLE_MAPPING')
             if fact['semantic_kind'] in ('line_total', 'unit_price', 'quantity', 'material') and fact['entity_key'] is None and len(group['members']) > 1:
                 raise ApiError(422, '工项尚未明确，不能自动归并')
@@ -104,7 +104,7 @@ def validate_extraction(quote, result):
         if not fact['source_refs']:
             raise ApiError(502, '模型字段缺少原文依据', 'INVALID_MODEL_OUTPUT')
         source = '\n'.join(blocks[reference['block_id']] for reference in fact['source_refs'])
-        if fact['raw_value'] is not None and canonical(fact['raw_value']) not in canonical(source):
+        if fact['raw_value'] is not None and normalize_text(fact['raw_value']) not in normalize_text(source):
             raise ApiError(502, '模型字段未能匹配原文', 'INVALID_MODEL_OUTPUT')
         fact['origin'] = 'extracted'
         fact['review_status'] = 'unreviewed'
@@ -124,7 +124,7 @@ async def save_mappings(project_id: str, request: Request):
     with state.db.transaction():
         quotes = state.db.rows('SELECT * FROM quotes WHERE project_id=?', (project_id,))
         check_groups(quotes, body['groups'])
-        revision = state.db.bump(project_id, body['expected_revision'], invalidate=False)
+        revision = state.db.advance_revision(project_id, body['expected_revision'], invalidate=False)
         state.db.update('projects', project_id, {'field_groups_json': dump(body['groups']), 'mappings_revision': revision})
     return get_mappings(project_id, request)
 
@@ -201,7 +201,7 @@ def comparison_data(state, project, quotes, groups, comparison_id):
                                (['material', 'brand', '材料', '品牌'], '材料规格或品牌未注明')]:
             if not any(term in labels for term in terms):
                 flag(quote['id'], None, 'unclear', message)
-    comparable = (len(totals) == len(quotes) and len({signature(total) for total in totals}) == 1
+    comparable = (len(totals) == len(quotes) and len({field_signature(total) for total in totals}) == 1
                   and all(total['normalized_value'] is not None and total['tax_basis'] in ('included', 'not_applicable')
                           and total['review_status'] == 'confirmed' and total['currency'] == project['currency'] for total in totals))
     comparable = comparable and pending == 0 and not any(flag['category'] in ('missing', 'scope_difference', 'unclear', 'mapping') for flag in flags)
@@ -225,10 +225,11 @@ async def create_comparison(project_id: str, request: Request):
     body = validate('ComparisonCreate', await request.json())
     identifier(body['request_id'])
     signature_hash = fingerprint({key: value for key, value in body.items() if key != 'request_id'})
+    request_hash = fingerprint({'project_id': project_id, 'body': signature_hash})
     with state.db.transaction():
         previous = state.db.rows('SELECT id,request_hash FROM comparisons WHERE request_id=?', (body['request_id'],))
         if previous:
-            if previous[0]['request_hash'] != fingerprint({'project_id': project_id, 'body': signature_hash}):
+            if previous[0]['request_hash'] != request_hash:
                 raise ApiError(409, '请求编号对应不同内容', 'IDEMPOTENCY_CONFLICT')
             return get_comparison(previous[0]['id'], request)
         project = state.db.get('projects', project_id)
@@ -249,7 +250,7 @@ async def create_comparison(project_id: str, request: Request):
             result = comparison_data(state, project, quotes, groups, comparison_id)
             validate('ComparisonDetail', result)
             state.db.insert('comparisons', {'id': comparison_id, 'project_id': project_id, 'request_id': body['request_id'],
-                                           'request_hash': fingerprint({'project_id': project_id, 'body': signature_hash}),
+                                           'request_hash': request_hash,
                                            'source_revision': project['revision'], 'snapshot_json': dump(result)})
         except Exception:
             state.files.remove_folder(project_id, f'snapshots/{comparison_id}')

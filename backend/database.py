@@ -1,4 +1,3 @@
-import json
 import sqlite3
 import threading
 from contextlib import contextmanager
@@ -50,15 +49,12 @@ class Database:
         columns = ','.join(key + '=?' for key in fields)
         self.connection.execute(f'UPDATE {table} SET {columns} WHERE id=?', (*fields.values(), resource_id))
 
-    def bump(self, project_id, expected, invalidate=True):
+    def advance_revision(self, project_id, expected_revision, invalidate=True):
         project = self.get('projects', project_id)
-        if project['revision'] != expected:
+        if project['revision'] != expected_revision:
             raise ApiError(409, '项目已更新，请刷新后重试', 'STALE_REVISION')
-        fields = {'revision': expected + 1, 'updated_at': now()}
+        fields = {'revision': expected_revision + 1, 'updated_at': now()}
         if invalidate:
             fields['mappings_revision'] = None
         self.update('projects', project_id, fields)
-        return expected + 1
-
-    def json(self, table, resource_id, column):
-        return json.loads(self.get(table, resource_id)[column])
+        return expected_revision + 1

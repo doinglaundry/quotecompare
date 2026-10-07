@@ -1,0 +1,105 @@
+{
+  "directory": "/var/folders/y1/z2r_x_mx3w39mrntl0wvvsrw0000gn/T/quotecompare-coverage-zppTKA",
+  "scenarios": [
+    {
+      "name": "Empty workspace, settings without a key, unavailable balance",
+      "status": "passed"
+    },
+    {
+      "name": "Project create/edit and active/completed/archived status",
+      "status": "passed"
+    },
+    {
+      "name": "Native file picker cancel/import, image file input, text paste",
+      "status": "passed"
+    },
+    {
+      "name": "Duplicate import, malformed PDF, 31-page PDF, 51MB file rejected",
+      "status": "passed"
+    },
+    {
+      "name": "Missing API key surfaces actionable UI error without extraction",
+      "status": "passed"
+    },
+    {
+      "name": "Review source image/highlight, all fact types, manual add/remove/save",
+      "status": "passed"
+    },
+    {
+      "name": "Re-extraction requires confirmation and cancel preserves manual edits",
+      "status": "passed"
+    },
+    {
+      "name": "Field union, rename, incompatible merge refusal, split and compatible merge",
+      "status": "passed"
+    },
+    {
+      "name": "Pending comparison explicit approval, full union and all cell states/filters",
+      "status": "passed"
+    },
+    {
+      "name": "Question deselection, contractor switch, Chinese draft editing/copy/restore",
+      "status": "passed"
+    },
+    {
+      "name": "Report source/question/privacy toggles, PDF/CSV files and save cancellation",
+      "status": "passed"
+    },
+    {
+      "name": "Usage date/provider/generation filters, balance refresh and official billing IPC",
+      "status": "passed"
+    },
+    {
+      "name": "Provider 401, invalid model JSON, unknown usage are visible and never auto-retried",
+      "status": "passed"
+    },
+    {
+      "name": "All three provider clients extract through actual desktop flows",
+      "status": "passed"
+    },
+    {
+      "name": "Confirmed re-extraction replaces saved manual data only after explicit approval",
+      "status": "passed"
+    },
+    {
+      "name": "Scanned PDF, JPEG/WebP OCR, source highlighting and original download",
+      "status": "passed"
+    },
+    {
+      "name": "Comparable totals, currency and tax flags, stale mappings and snapshot history",
+      "status": "passed"
+    },
+    {
+      "name": "Single config key keep/clear/switch, connection button guards",
+      "status": "passed"
+    },
+    {
+      "name": "Five quote cap, quote deletion, project switch, snapshot original retained",
+      "status": "passed"
+    },
+    {
+      "name": "Partial extraction failure, manual retry, task cancellation and busy UI",
+      "status": "passed"
+    },
+    {
+      "name": "Crash/restart marks interrupted, restores project and never auto-retries",
+      "status": "passed"
+    },
+    {
+      "name": "Project deletion leaves usage ledger and removes project/files/history",
+      "status": "passed"
+    },
+    {
+      "name": "Real HTTP session protection, IPC validation, revisions and request replay conflicts",
+      "status": "passed"
+    },
+    {
+      "name": "Project, snapshot and usage lists remain complete beyond the 100-item page limit",
+      "status": "passed"
+    },
+    {
+      "name": "All 25 API operations exercised over actual Electron IPC and local HTTP",
+      "status": "passed"
+    }
+  ]
+}

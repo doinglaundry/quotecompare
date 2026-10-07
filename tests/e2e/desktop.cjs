@@ -2,6 +2,7 @@ const { _electron: electron, expect } = require('@playwright/test');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const os = require('node:os');
+const { execFileSync } = require('node:child_process');
 
 async function main() {
   const root = path.resolve(__dirname, '../..');
@@ -125,6 +126,6 @@ async function main() {
     await noError();
     console.log('PASS: seven screens, real PDF/image OCR/text import, review, union comparison, evidence, draft edit/copy/restore, PDF/CSV save, provider switch, usage/balance.');
     console.log('Temporary test data:', directory);
-  } catch (error) { const page = await desktop.firstWindow(); await page.screenshot({ path: path.join(shots, 'failure.png') }); console.log((await page.locator('body').innerText()).slice(-7000)); throw error; } finally { await desktop.close(); }
+  } catch (error) { const page = await desktop.firstWindow(); await page.screenshot({ path: path.join(shots, 'failure.png') }); console.log((await page.locator('body').innerText()).slice(-7000)); throw error; } finally { await desktop.close(); execFileSync(path.join(root, '.venv/bin/python'), ['-c', "import json,sys; from pathlib import Path; from backend.modules.settings import Keychain; folder=Path(sys.argv[1]); config=json.loads((folder/'settings.json').read_text()); Keychain(folder).delete(config['account']) if config['account'] else None", directory], { cwd: root }); }
 }
 main().catch((error) => { console.error(error); process.exitCode = 1; });

@@ -35,6 +35,8 @@ jobs:
           .venv/bin/python tests/e2e/fixtures.py
           npm run build
           npm run test:e2e
+          npm run test:coverage
+          npm run test:recovery
       - name: Bundle Python
         run: npm run build:backend
       - name: Unsigned development build
@@ -69,3 +71,4 @@ jobs:
           path: |
             release/*.zip
             artifacts/e2e/*.png
+            artifacts/e2e/coverage-results.json

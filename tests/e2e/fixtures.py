@@ -16,3 +16,19 @@ for index, line in enumerate('Kitchen cabinets: 700\nAmount GBP 1100\nVAT includ
     draw.text((40, 40 + index * 95), line, fill='black', font=font)
 image.save(folder / 'Contractor-B.png')
 (folder / 'Contractor-C.txt').write_text('Worktop: 350\nTotal GBP 1300\nWaste removal: Not included\nMaterials: Quartz', encoding='utf-8')
+large_pdf = canvas.Canvas(str(folder / 'Too-many-pages.pdf'))
+for index in range(31):
+    large_pdf.drawString(40, 760, f'Page {index + 1}')
+    large_pdf.showPage()
+large_pdf.save()
+(folder / 'Invalid.pdf').write_bytes(b'This is not a PDF')
+from pypdf import PdfReader, PdfWriter
+image.save(folder / 'Scanned.pdf', 'PDF', resolution=150)
+image.save(folder / 'Contractor-B.jpg')
+image.save(folder / 'Contractor-B.webp')
+Image.new('RGB', (500, 500), 'white').save(folder / 'Blank.png')
+encrypted = PdfWriter()
+encrypted.append(PdfReader(folder / 'Contractor-A.pdf'))
+encrypted.encrypt('test-password')
+with (folder / 'Encrypted.pdf').open('wb') as stream:
+    encrypted.write(stream)

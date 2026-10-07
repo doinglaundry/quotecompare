@@ -17,7 +17,7 @@ router = APIRouter()
 DRAFT_SCHEMA = {'type': 'object', 'properties': {'subject': {'type': 'string', 'maxLength': 500}, 'body': {'type': 'string', 'maxLength': 20000}}, 'required': ['subject', 'body'], 'additionalProperties': False}
 
 
-def snapshot(state, comparison_id, project_id):
+def load_snapshot(state, comparison_id, project_id):
     row = state.db.get('comparisons', comparison_id)
     if row['project_id'] != project_id:
         raise ApiError(404, '对比记录不属于当前项目', 'NOT_FOUND')
@@ -48,7 +48,7 @@ async def save_draft(draft_id: str, request: Request):
 
 
 def draft_input(state, body):
-    data = snapshot(state, body['comparison_id'], body['project_id'])
+    data = load_snapshot(state, body['comparison_id'], body['project_id'])
     columns = {column['quote_id']: column for column in data['comparison']['columns']}
     if body['quote_id'] not in columns:
         raise ApiError(404, '承包商不属于该对比快照', 'NOT_FOUND')
@@ -77,6 +77,7 @@ def report_sections(data, options):
         data['project']['property'] = None
     comparison = data['comparison']
     columns = comparison['columns']
+    contractor_names = {column['quote_id']: column['contractor_name'] for column in columns}
     table = [['统一字段 / 口径', *[column['contractor_name'] + '\n' + (column.get('currency') or '币种未注明') for column in columns]]]
     for row in comparison['rows']:
         cells = {cell['quote_id']: cell for cell in row['cells']}
@@ -94,19 +95,15 @@ def report_sections(data, options):
                          '比较币种：' + data['project']['currency'], '快照时间：' + comparison['created_at'], comparison['summary']]),
                 ('缺失与风险提示', [flag['message'] for flag in data['flags']])]
     if options.get('include_questions'):
-        sections.append(('承包商追问', [columns_by_id(columns, question['quote_id']) + '：' + question['text'] for question in data['questions']]))
+        sections.append(('承包商追问', [contractor_names[question['quote_id']] + '：' + question['text'] for question in data['questions']]))
     if options.get('include_sources'):
         sections.append(('原文依据（文字）', [f'{source["contractor_name"] or source["quote_id"]} · 第 {block["page"] or "文字"} 页：{block["text"]}'
                                           for source in data['sources'] for block in source['blocks']]))
     return table, sections
 
 
-def columns_by_id(columns, quote_id):
-    return next(column['contractor_name'] for column in columns if column['quote_id'] == quote_id)
-
-
 def render_report(state, body, job_id):
-    data = snapshot(state, body['comparison_id'], body['project_id'])
+    data = load_snapshot(state, body['comparison_id'], body['project_id'])
     table, sections = report_sections(data, body['report_options'])
     escape = html.escape
     preview = '<!doctype html><html lang="zh-CN"><meta charset="utf-8"><style>body{font:15px -apple-system,sans-serif;max-width:1100px;margin:40px;color:#163c37}table{border-collapse:collapse;width:100%}td,th{padding:12px;border:1px solid #ddd}th{background:#e8f3ef}p{white-space:pre-wrap}</style><h1>报价对比报告</h1>'

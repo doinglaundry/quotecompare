@@ -49,6 +49,8 @@ tests/e2e/            实际桌面操作及安装包验证
 .venv/bin/python tests/e2e/fixtures.py
 npm run build
 npm run test:e2e
+npm run test:coverage
+npm run test:recovery
 npm run package
 npm run test:packaged
 ```
@@ -57,7 +59,7 @@ OCR 和钥匙串测试需在原生 Mac 环境执行。桌面 E2E 使用独立测
 
 `npm run package` 内置 Python 并生成 `release/mac-arm64/QuoteCompare.app`（Intel Mac 上为 `mac`）；安装包测试把 PATH 限定为系统路径，验证不依赖开发环境。可手动触发 [Mac 构建工作流](.github/workflows/mac.yml) 生成 ARM64 / Intel 包；有证书时可选择正式签名、公证。没有证书的构建不会宣称正式分发。
 
-完整验收项目、截图和审查修正见 [验证记录](docs/implementation/verification.md)。
+本轮 25 个桌面覆盖场景、1 个恢复回归、代码简化和验证边界见 [验证记录](docs/implementation/verification.md)；[机器结果](docs/implementation/coverage-results.json)保留每项状态。
 
 ## 产品与接口
 

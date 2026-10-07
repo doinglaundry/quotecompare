@@ -21,8 +21,7 @@ from backend.schemas import ApiError, error_payload, uid
 def create_app(directory=None, token=None, secrets=None, providers=None):
     directory = Path(directory or Path.home() / 'Library/Application Support/QuoteCompare')
     state = SimpleNamespace(directory=directory, db=Database(directory), files=Files(directory),
-                            token=token or os.environ.get('QUOTECOMPARE_SESSION_TOKEN') or uid(),
-                            secrets=secrets, providers=providers)
+                            token=token or os.environ.get('QUOTECOMPARE_SESSION_TOKEN') or uid())
 
     state.secrets = secrets or settings.Keychain(directory)
     state.providers = providers or Providers()
@@ -33,8 +32,8 @@ def create_app(directory=None, token=None, secrets=None, providers=None):
     @asynccontextmanager
     async def lifespan(app):
         yield
-        state.jobs.close()
-        state.providers.close()
+        state.jobs.pool.shutdown(wait=True, cancel_futures=True)
+        state.providers.client.close()
         state.db.connection.close()
 
     app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
