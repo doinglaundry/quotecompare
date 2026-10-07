@@ -6,6 +6,50 @@ QuoteCompare 是给房东和物业经理使用的 **Mac 本地装修／维修报
 
 本仓库包含应用源码、PRD、完整产品图、技术方案、数据库 SQL 和自动化测试。前端使用 JavaScript / React / Electron，后端使用 Python / FastAPI，数据使用 SQLite 和本地文件保存。
 
+## 下载并使用（普通用户）
+
+**[下载 QuoteCompare for Mac](https://github.com/doinglaundry/quotecompare/releases/latest/download/QuoteCompare-mac-arm64.zip)** · [版本页面](https://github.com/doinglaundry/quotecompare/releases/latest)
+
+公开下载，不需要 GitHub 账号或仓库权限。当前软件包适用于 **Apple Silicon Mac（M1/M2/M3/M4等）**，已在 macOS 15.7验收；本版本没有 Intel / Windows / Linux 软件包。
+
+1. 下载 ZIP并解压。
+2. 将 `QuoteCompare.app` 拖到“应用程序”，双击打开。
+3. 需要 AI 分析时，在应用的“模型设置”中填写自己的 API Key。
+
+软件包内置 Python、PDF解析和 OCR依赖；用户无需克隆仓库、安装 Node.js/Python、配置端口或数据库。Mac开发包尚未做 Developer ID签名和 Apple公证，系统可能要求首次打开确认。
+
+## 交给智能体：自动下载并启动
+
+把下面整段交给具备本机操作能力的智能体。它负责下载、校验、解压和启动，用户无需处理开发环境。
+
+```text
+请在我的 Mac 上自动安装并启动 QuoteCompare。
+软件包是公开的，不需要 GitHub 登录或仓库权限。
+
+应用下载地址：
+https://github.com/doinglaundry/quotecompare/releases/latest/download/QuoteCompare-mac-arm64.zip
+校验文件地址：
+https://github.com/doinglaundry/quotecompare/releases/latest/download/SHA256SUMS.txt
+
+请实际执行以下操作，不要只给我安装教程：
+1. 检查这是 Apple Silicon Mac（macOS，arm64）。当前包不适用于 Intel
+   或其他系统，不要安装架构不匹配的软件。
+2. 在临时目录下载应用ZIP和SHA256SUMS.txt，校验SHA-256；下载或校验
+   失败时重新下载，仍失败则报告实际原因，不启动不完整文件。
+3. 用macOS的ditto解压，将QuoteCompare.app放到~/Applications/。
+   如果已有可用应用则优先复用；需要更换应用时先退出并保留旧应用。
+   不删除或改写用户的项目数据，不克隆仓库，不安装开发依赖。
+4. 清除当前启动进程中可能存在的ELECTRON_RUN_AS_NODE，然后使用open
+   打开应用。不要要求用户手动安装Python、Node.js或配置后端。
+   如果macOS要求首次打开授权，引导用户完成系统规定的确认；不要关闭
+   系统安全机制，也不要声称不需要这类系统授权。
+5. 验证窗口出现“项目与报价资料”，能够进入“模型设置”。若无法操作
+   窗口，说明已确认的进程状态和待确认的界面状态，不假称验收成功。
+6. 启动失败时排查下载文件、架构、应用完整性和系统提示，修复后重试。
+   成功后保持应用运行，只告诉我已启动和应用所在位置。
+   API Key由我之后在应用界面填写，不替我调用付费模型或发送邮件。
+```
+
 ## 可以做什么
 
 | 界面 | 功能 |
@@ -24,9 +68,9 @@ QuoteCompare 是给房东和物业经理使用的 **Mac 本地装修／维修报
 
 项目、原文和报告保存在此 Mac；**AI 分析需要网络**：AI 提取、归并、草稿及连接测试会通过网络调用所选服务商，发送该任务所需内容，并使用用户自己的 API 额度。未注明内容仍需人工确认。
 
-## 从源码在本地启动
+## 从源码在本地启动（开发者）
 
-需要有访问本仓库的 GitHub 权限。完整应用依赖 macOS 的 OCR 和钥匙串；当前验证环境为 Apple Silicon / macOS 15.7，Windows / Linux 暂不支持完整流程。
+仓库公开，源码可直接克隆。完整应用依赖 macOS 的 OCR 和钥匙串；当前验证环境为 Apple Silicon / macOS 15.7，Windows / Linux 暂不支持完整流程。
 
 开发环境需要：
 
@@ -91,51 +135,6 @@ npm start
 没有 API Key 也能启动、创建项目和导入文件；使用模型相关功能时才需要配置。密钥请在应用界面填写，不放进仓库、终端命令或聊天记录。
 
 资料位于 Electron 的 `userData` 目录，macOS 默认为 `~/Library/Application Support/quotecompare/`；打包应用的目录名可能显示为 `QuoteCompare`。其中 `app.db` 保存业务数据。退出应用后备份整个数据目录即可保留数据库及关联文件；API Key 单独保存在系统钥匙串。
-
-## 交给智能体的安装启动提示词
-
-复制下面整段，交给**具备本机终端、文件和网络操作能力**的智能体。仓库为私有仓库，执行者需要已有 GitHub 访问权限。
-
-```text
-请帮我在这台 Mac 上安装并启动 QuoteCompare，仓库地址：
-https://github.com/doinglaundry/quotecompare.git
-
-请实际执行到应用窗口打开并完成验收，不要只给我命令或方案。
-
-1. 检查系统是否为 macOS，检查 Git、Node.js、npm 和 Python 版本。
-   需要 Node.js 22.12+、Python 3.14。优先使用已安装且符合要求的环境。
-   缺少依赖时，使用已有包管理器安装；若已有 Homebrew，可安装 git、
-   node@22、python@3.14，并将 node@22 的 bin 加入当前命令 PATH。
-   缺少系统权限或包管理器时，只询问完成安装必需的信息。
-   若不是 macOS，说明本应用依赖 macOS OCR/钥匙串，停止本地安装。
-2. 优先复用本机已有的这个仓库，核对 Git remote；不存在时克隆到合适的
-   用户目录。不得覆盖已有目录、重置代码或删除用户数据。
-   若私有仓库无法访问，请帮助用户完成正常 GitHub 登录或获取访问权限；
-   不要索取或打印令牌。拿到仓库后先阅读 README.md 和 AGENTS.md。
-3. 在仓库根目录，用 Python 3.14 创建 .venv。已有环境先检查版本，不要
-   直接删除；版本不匹配时保留旧环境，创建符合要求的环境。
-   执行 .venv/bin/python -m pip install -r requirements-dev.txt 和 npm ci。
-   使用 package-lock.json，不升级依赖，不修改业务代码。
-4. 清除当前启动进程中的 ELECTRON_RUN_AS_NODE、QUOTECOMPARE_E2E 和
-   QUOTECOMPARE_TEST_DATA（若有），然后在仓库根目录执行 npm start。
-   让 Electron 自动启动本地 Python 服务，不另起无认证后端。
-5. 检查应用是否显示“项目与报价资料”，是否能打开“模型设置”。
-   可以使用自动化工具在独立临时 user-data-dir 下创建测试项目、重启
-   并确认项目保留；测试完退出临时实例，再启动用户的正常实例。
-   不向用户已有项目写测试数据。若无法操作窗口，请用户完成这两项检查，
-   不要将进程存活当作界面验收成功。
-6. 启动失败时读取必要错误并排查环境、依赖、构建或本地服务问题，修复后
-   重试。不要假称已经启动；不要泄露密钥或使用模拟模型冒充真实连接。
-7. 保持正常应用实例运行，告诉我仓库位置、实际使用的版本、验证结果，
-   以及下次执行 npm start 的位置。说明 API Key 需由我在应用中自行填写；
-   不替我调用付费模型、不自动发送邮件，不提交或推送任何代码改动。
-```
-
-## 直接使用打包应用
-
-已有构建包时，解压并打开 `QuoteCompare.app`。Python、PDF解析和 OCR 依赖已包含，最终用户不需要安装 Node.js 或 Python。
-
-可以通过 [Mac 构建工作流](.github/workflows/mac.yml) 手动生成并下载构建产物，需要仓库访问和工作流执行权限；也可按下一节本地打包。当前本地开发包未做 Developer ID 签名及 Apple 公证，正式分发需另外配置证书。
 
 ## 测试与打包
 
