@@ -38,17 +38,51 @@ https://github.com/doinglaundry/quotecompare/releases/latest/download/SHA256SUMS
 不要替我调用付费模型或发送邮件。
 ```
 
-## 功能
+## 功能页面
 
-| 功能 | 说明 |
-| --- | --- |
-| 报价资料 | 项目管理；导入PDF、图片或文字；每项目最多五份报价 |
-| 核对 | AI提取、原文定位、人工编辑和确认 |
-| 对比 | 汇总全部字段，仅合并含义与口径一致的字段；缺失值标“未提供”；保存历史快照 |
-| 追问 | 根据缺失信息生成中英文邮件草稿，可编辑、保存和复制 |
-| 报告 | 预览并导出PDF / CSV，可隐藏房产地址 |
-| 模型设置 | OpenAI / Claude / DeepSeek；保存当前一组连接，切换时删除旧密钥 |
-| 用量费用 | 本应用调用、Token和估算费用；DeepSeek余额及官方账单入口 |
+页面中的报价与用量为演示数据。
+
+### 报价资料
+
+创建项目，导入PDF、图片或文字报价；每项目最多五份。
+
+![报价资料](docs/implementation/screens/01-materials.png)
+
+### 核对
+
+对照原文检查AI提取结果，修改并确认金额、材料和条款。
+
+![核对](docs/implementation/screens/02-review.png)
+
+### 对比
+
+按统一口径展示全部字段、差异和风险；缺失值标“未提供”，并保留历史快照。
+
+![对比](docs/implementation/screens/03-comparison.png)
+
+### 追问
+
+针对缺失信息生成中英文邮件草稿，可编辑、保存和复制。
+
+![追问](docs/implementation/screens/04-questions.png)
+
+### 报告预览与导出
+
+预览报告并导出PDF / CSV，可选择附录内容或隐藏房产地址。
+
+![报告预览与导出](docs/implementation/screens/05-report.png)
+
+### 模型设置
+
+选择OpenAI、Claude或DeepSeek并填写API Key；只保存当前连接，切换时删除旧密钥。
+
+![模型设置](docs/implementation/screens/06-settings.png)
+
+### 用量与费用
+
+查看本应用调用、Token和估算费用，查询DeepSeek余额或打开官方账单。
+
+![用量与费用](docs/implementation/screens/07-usage.png)
 
 ## 源码开发
 
