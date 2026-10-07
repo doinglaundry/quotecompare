@@ -33,7 +33,7 @@
 - [x] 5. Seven UI screens: Electron main/preload manages service/files/clipboard; React pages perform actual API actions with all required editing/history/settings/usage interactions. Browser/Electron tests use test-only external model protocol server; production contains no demo fallback.
 - [x] 6. Packaging: Python executable bundled by PyInstaller; Electron arm64 app/package produced. Launch with system-only PATH and fresh app-data directory; no installed Python assumption. Provide CI x64/arm64 packaging and signing support.
 - [x] 7. Full end-to-end: real app import text/PDF/image -> extraction -> manual edit -> field mapping -> snapshot -> draft -> export -> reload history; settings/provider/cost controls and error cases. Record exact limits of external-provider/signing verification.
-- [ ] 8. Independent simplification review: send reviewer source and checks; apply warranted simplification with regression tests; commit, integrate main and push, verify remote SHA.
+- [x] 8. Independent simplification review: send reviewer source and checks; apply warranted simplification with regression tests; commit, integrate main and push, verify remote SHA.
 
 ## Rulings
 - Existing dedicated repository is clean and contains only docs; implement on a feature branch in that checkout. No need for a second repository or checkout.
