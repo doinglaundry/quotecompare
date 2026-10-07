@@ -2,11 +2,15 @@ const { _electron: electron, expect } = require('@playwright/test');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const os = require('node:os');
+const { execFileSync } = require('node:child_process');
 
 async function main() {
   const root = path.resolve(__dirname, '../..');
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'quotecompare-packaged-'));
   const executable = process.argv[2] || path.join(root, 'release/mac-arm64/QuoteCompare.app/Contents/MacOS/QuoteCompare');
+  const appBundle = path.resolve(path.dirname(executable), '../..');
+  execFileSync('/usr/bin/codesign', ['--verify', '--deep', '--strict', appBundle]);
+  console.log('PASS: complete app signature and sealed resources verified.');
   const env = { ...process.env, PATH: '/usr/bin:/bin:/usr/sbin:/sbin' };
   delete env.ELECTRON_RUN_AS_NODE;
   delete env.PYTHONPATH;

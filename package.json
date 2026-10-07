@@ -1,6 +1,6 @@
 {
   "name": "quotecompare",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "Mac 本地报价对比",
   "author": "doinglaundry",
@@ -9,7 +9,7 @@
     "build": "vite build --config frontend/vite.config.js",
     "start": "npm run build && electron .",
     "test:e2e": "node tests/e2e/desktop.cjs",
-    "package": "npm run build:backend && npm run build && electron-builder --mac --dir --config.electronDist=node_modules/electron/dist --config.mac.identity=null",
+    "package": "npm run build:backend && npm run build && electron-builder --mac --dir --config.electronDist=node_modules/electron/dist --config.mac.identity=-",
     "build:backend": "sh scripts/build_backend.sh",
     "test:packaged": "node tests/e2e/packaged.cjs",
     "test:coverage": "node tests/e2e/coverage.cjs",

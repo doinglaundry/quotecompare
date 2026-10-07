@@ -4,6 +4,18 @@
 
 本次实现保留一个 Python 服务、四个业务模块、六张表、25 项接口。sqlite3 直接事务处理，jsonschema 复用 OpenAPI，不增加 ORM、重复 DTO、消息队列或独立服务。
 
+## v0.1.1 下载包签名修复
+
+用户下载的 v0.1.0 ZIP与公开资产SHA-256一致，压缩完整性检查通过；问题在App封装：`codesign --verify --deep --strict`返回“code has no resources but signature indicates they must be present”。原打包参数identity=null跳过了完整应用签名，运行测试没有覆盖这一关。
+
+修复：本地打包及CI开发构建改用identity=-，对整个应用做ad hoc签名；`test:packaged`在启动前增加真实codesign资源校验。新增检查先在旧包失败，再在v0.1.1通过。没有改变业务代码。
+
+本轮验证：重建成功；实际v0.1.1 ZIP通过CRC校验，解压后的签名、系统PATH启动、钥匙串、PDF/图片OCR、SQLite持久化、报价对比和PDF导出全部通过；原生Mac权限下后端21项通过。最初受限环境中OCR/钥匙串两项被拒绝，在正常Mac权限下重跑通过，未为此修改业务代码。
+
+v0.1.1 ZIP SHA-256：`6f4ce5e3aa40348d9ac72f0b3e62482aa284abeee4e349ed6c933fc494ba44ac`。
+
+**验收边界：**本地签名完整性不等于Apple认可。`spctl`对新包仍返回rejected；本机无Developer ID证书，仓库也没有公证凭据。浏览器下载后的首次系统授权尚未验收，不能宣称无需确认即可双击启动。README及发行说明给出[Apple官方的“仍要打开”流程](https://support.apple.com/en-us/102445)；完全消除开发者验证拦截需Developer ID签名和公证。
+
 ## 功能与验证对应
 
 | 功能 | 实际验证 |

@@ -40,9 +40,9 @@ jobs:
           npm run test:reads
       - name: Bundle Python
         run: npm run build:backend
-      - name: Unsigned development build
+      - name: Ad hoc development build
         if: ${{ !inputs.signed }}
-        run: npx --no-install electron-builder --mac --dir --config.electronDist=node_modules/electron/dist --config.mac.identity=null
+        run: npx --no-install electron-builder --mac --dir --config.electronDist=node_modules/electron/dist --config.mac.identity=-
       - name: Signed distribution build
         if: ${{ inputs.signed }}
         env:

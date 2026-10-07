@@ -14,7 +14,7 @@
 2. 在“模型设置”中选择 OpenAI、Claude 或 DeepSeek，填写API Key。
 3. 新建项目、导入报价，核对后查看对比并导出报告。
 
-当前开发包尚未签名和公证，macOS可能要求首次打开确认。
+应用已做完整的本地签名，尚无 Apple Developer ID及公证。首次被拦截时，在“系统设置 → 隐私与安全 → 仍要打开”确认，见 [Apple说明](https://support.apple.com/en-us/102445)。
 
 ## 让智能体自动安装并启动
 
