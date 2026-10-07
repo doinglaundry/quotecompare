@@ -26,13 +26,13 @@
 - Hide-property export redacts report body and appendices; CSV formulas and document prompt injection do not execute.
 
 ## Execution ledger
-- [ ] 1. API and persistence: tests/backend/test_projects.py checks real FastAPI requests, six-table creation, auth, revision/idempotency, ownership, deletes. Implement backend/app.py, database.py, schemas.py, files.py, modules/projects.py. Verify pytest tests.
-- [ ] 2. Sources and AI: tests/backend/test_analysis.py checks text/PDF/image reading, original block refs, malformed provider outputs, manual edits retained, union/group coverage and typed comparison. Implement providers.py and modules/analysis.py.
-- [ ] 3. Jobs/settings/ledger: tests/backend/test_jobs.py checks task transitions, restart/cancel/stale results, config busy guard, key redaction, protocol clients for all three providers, usage/null cost/balance. Implement jobs.py and modules/settings.py.
-- [ ] 4. Snapshots/drafts/reports: tests/backend/test_reports.py checks comparison truth, immutability, snapshot file survival, question selection, saved draft edits, PDF/CSV/HTML privacy and download. Implement modules/reports.py.
-- [ ] 5. Seven UI screens: Electron main/preload manages service/files/clipboard; React pages perform actual API actions with all required editing/history/settings/usage interactions. Browser/Electron tests use test-only external model protocol server; production contains no demo fallback.
-- [ ] 6. Packaging: Python executable bundled by PyInstaller; Electron arm64 app/package produced. Launch with system-only PATH and fresh app-data directory; no installed Python assumption. Provide CI x64/arm64 packaging and signing support.
-- [ ] 7. Full end-to-end: real app import text/PDF/image -> extraction -> manual edit -> field mapping -> snapshot -> draft -> export -> reload history; settings/provider/cost controls and error cases. Record exact limits of external-provider/signing verification.
+- [x] 1. API and persistence: backend/tests/test_projects.py checks real FastAPI requests, six-table creation, auth, revision/idempotency, ownership, deletes. Implement backend/app.py, database.py, schemas.py, files.py, modules/projects.py. Verify pytest tests.
+- [x] 2. Sources and AI: backend/tests/test_analysis.py checks text/PDF/image reading, original block refs, malformed provider outputs, manual edits retained, union/group coverage and typed comparison. Implement providers.py and modules/analysis.py.
+- [x] 3. Jobs/settings/ledger: backend/tests/test_jobs.py checks task transitions, restart/cancel/stale results, config busy guard, key redaction, protocol clients for all three providers, usage/null cost/balance. Implement jobs.py and modules/settings.py.
+- [x] 4. Snapshots/drafts/reports: backend/tests/test_workflow.py checks comparison truth, immutability, snapshot file survival, question selection, saved draft edits, PDF/CSV/HTML privacy and download. Implement modules/reports.py.
+- [x] 5. Seven UI screens: Electron main/preload manages service/files/clipboard; React pages perform actual API actions with all required editing/history/settings/usage interactions. Browser/Electron tests use test-only external model protocol server; production contains no demo fallback.
+- [x] 6. Packaging: Python executable bundled by PyInstaller; Electron arm64 app/package produced. Launch with system-only PATH and fresh app-data directory; no installed Python assumption. Provide CI x64/arm64 packaging and signing support.
+- [x] 7. Full end-to-end: real app import text/PDF/image -> extraction -> manual edit -> field mapping -> snapshot -> draft -> export -> reload history; settings/provider/cost controls and error cases. Record exact limits of external-provider/signing verification.
 - [ ] 8. Independent simplification review: send reviewer source and checks; apply warranted simplification with regression tests; commit, integrate main and push, verify remote SHA.
 
 ## Rulings

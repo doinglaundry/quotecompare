@@ -5,6 +5,8 @@ PRAGMA busy_timeout=5000;
 BEGIN;
 
 CREATE TABLE projects (
+    -- 原始创建参数摘要；用于修改后的创建请求重放。
+    request_hash TEXT NOT NULL,
     -- 项目唯一编号；同一项目下的报价通过 project_id 关联。
     id TEXT NOT NULL PRIMARY KEY CHECK (length(id) BETWEEN 1 AND 80),
     -- 项目名称，例如：厨房维修。
@@ -41,6 +43,8 @@ CREATE TABLE projects (
 );
 
 CREATE TABLE quotes (
+    -- 原始导入参数摘要；去重先于当前版本检查。
+    request_hash TEXT NOT NULL,
     id TEXT NOT NULL PRIMARY KEY CHECK (length(id) BETWEEN 1 AND 80),
     project_id TEXT NOT NULL,
     contractor_name TEXT CHECK (contractor_name IS NULL OR length(contractor_name) <= 200),
@@ -58,7 +62,7 @@ CREATE TABLE quotes (
     status TEXT NOT NULL DEFAULT 'imported' CHECK (
         status IN ('imported', 'extracting', 'review_required', 'reviewed', 'failed')
     ),
-    -- 本地解析的原文块，包含页码/坐标；内部结构由 Pydantic 校验。
+    -- 本地解析的原文块，包含页码/坐标；内部结构由 OpenAPI JSON Schema 校验。
     source_blocks_json TEXT NOT NULL DEFAULT '[]'
         CHECK (CASE WHEN json_valid(source_blocks_json) THEN json_type(source_blocks_json) = 'array' ELSE 0 END),
     -- 最新模型输出；含模型、提示词版本、原始结果和提取事实，不含 API Key。

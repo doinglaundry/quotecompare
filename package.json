@@ -1,0 +1,52 @@
+{
+  "name": "quotecompare",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Mac 本地报价对比",
+  "author": "doinglaundry",
+  "main": "frontend/electron/main.cjs",
+  "scripts": {
+    "build": "vite build --config frontend/vite.config.js",
+    "start": "npm run build && electron .",
+    "test:e2e": "node tests/e2e/desktop.cjs",
+    "package": "npm run build:backend && npm run build && electron-builder --mac --dir --config.electronDist=node_modules/electron/dist --config.mac.identity=null",
+    "build:backend": "sh scripts/build_backend.sh",
+    "test:packaged": "node tests/e2e/packaged.cjs"
+  },
+  "dependencies": {
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "vite": "^7.1.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "electron": "^38.0.0",
+    "electron-builder": "^26.0.0",
+    "@playwright/test": "^1.55.0"
+  },
+  "build": {
+    "appId": "com.doinglaundry.quotecompare",
+    "productName": "QuoteCompare",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "frontend/dist/**/*",
+      "frontend/electron/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "artifacts/quotecompare-backend",
+        "to": "backend"
+      }
+    ],
+    "mac": {
+      "category": "public.app-category.business",
+      "target": [
+        "dir"
+      ]
+    },
+    "asar": true
+  }
+}

@@ -1,0 +1,71 @@
+name: Build Mac app
+on:
+  workflow_dispatch:
+    inputs:
+      signed:
+        description: Developer ID 签名并公证（需要仓库签名 secrets）
+        type: boolean
+        default: false
+permissions:
+  contents: read
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [macos-15, macos-15-intel]
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+      - name: Dependencies
+        run: |
+          python -m venv .venv
+          .venv/bin/python -m pip install -r requirements-dev.txt
+          npm ci
+      - name: Backend and desktop acceptance
+        run: |
+          .venv/bin/python -m pytest backend/tests -q
+          .venv/bin/python tests/e2e/fixtures.py
+          npm run build
+          npm run test:e2e
+      - name: Bundle Python
+        run: npm run build:backend
+      - name: Unsigned development build
+        if: ${{ !inputs.signed }}
+        run: npx --no-install electron-builder --mac --dir --config.electronDist=node_modules/electron/dist --config.mac.identity=null
+      - name: Signed distribution build
+        if: ${{ inputs.signed }}
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          test -n "$CSC_LINK"
+          test -n "$CSC_KEY_PASSWORD"
+          test -n "$APPLE_ID"
+          test -n "$APPLE_APP_SPECIFIC_PASSWORD"
+          test -n "$APPLE_TEAM_ID"
+          npx --no-install electron-builder --mac --dir --config.electronDist=node_modules/electron/dist --config.forceCodeSigning=true
+      - name: Package runtime acceptance
+        run: |
+          app_executable=$(find release -path '*/QuoteCompare.app/Contents/MacOS/QuoteCompare' -print -quit)
+          node tests/e2e/packaged.cjs "$app_executable"
+      - name: Zip app
+        run: |
+          app_directory=$(find release -name QuoteCompare.app -type d -maxdepth 3 -print -quit)
+          ditto -c -k --sequesterRsrc --keepParent "$app_directory" "release/QuoteCompare-${{ runner.arch }}.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: QuoteCompare-${{ runner.arch }}
+          path: |
+            release/*.zip
+            artifacts/e2e/*.png

@@ -1,0 +1,12 @@
+fastapi==0.142.2
+uvicorn==0.54.0
+jsonschema==4.26.0
+httpx==0.28.1
+python-multipart==0.0.32
+pypdf==6.19.0
+pypdfium2==5.14.0
+Pillow==12.3.0
+reportlab==5.0.1
+keyring==25.7.0
+pyobjc-framework-Vision==12.2.2; sys_platform == 'darwin'
+pyobjc-framework-Quartz==12.2.2; sys_platform == 'darwin'
