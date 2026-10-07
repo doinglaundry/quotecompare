@@ -14,7 +14,9 @@
 
 v0.1.1 ZIP SHA-256：`6f4ce5e3aa40348d9ac72f0b3e62482aa284abeee4e349ed6c933fc494ba44ac`。
 
-**验收边界：**本地签名完整性不等于Apple认可。`spctl`对新包仍返回rejected；本机无Developer ID证书，仓库也没有公证凭据。浏览器下载后的首次系统授权尚未验收，不能宣称无需确认即可双击启动。README及发行说明给出[Apple官方的“仍要打开”流程](https://support.apple.com/en-us/102445)；完全消除开发者验证拦截需Developer ID签名和公证。
+**真实下载后打开检查：**用户在浏览器下载的v0.1.1 ZIP与上述SHA-256一致；Finder重新解压出的App版本为0.1.1，带下载隔离标记，完整签名校验通过。实际尝试打开后仍在启动前被Gatekeeper拦截，提示Apple无法验证应用；系统amfid日志返回Code=-423，原因是“adhoc signed or signed by an unknown certificate chain”，syspolicyd记录安全提示等待响应。`spctl`返回rejected。
+
+**验收边界：**本地签名完整性不等于Apple认可。本机无Developer ID证书，仓库也没有公证凭据；浏览器下载后无额外授权直接启动的验收失败，不能把本地运行测试当作首次安装通过。没有删除隔离属性或关闭系统安全机制，也未确认“仍要打开”后的运行结果。README及发行说明给出[Apple官方的“仍要打开”流程](https://support.apple.com/en-us/102445)；正式公开分发需Developer ID签名和公证。
 
 ## 功能与验证对应
 
